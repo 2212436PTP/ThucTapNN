@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { Icons } from '../ui/Icons';
+import { QualityBarChart } from '../ui/QualityBarChart';
 import { CreateClassModal } from '../modals/CreateClassModal';
 import { CreateTeacherModal } from '../modals/CreateTeacherModal';
 import { ConfigureSurveyModal } from '../modals/ConfigureSurveyModal';
@@ -8,8 +9,36 @@ import { StudentManagementModal } from '../modals/StudentManagementModal';
 import { LabSeatMapModal } from '../modals/LabSeatMapModal';
 import { AuditLogsModal } from '../modals/AuditLogsModal';
 import { classifyFeedback } from '../../lib/sentimentClassifier';
+import { Course, Teacher, ClassInfo, Review, AlertItem, RoomFacilitySummary } from '../../types';
 
-export const AdminView = ({ 
+export interface AdminViewProps {
+    classes: ClassInfo[];
+    courses: Course[];
+    teachers: Teacher[];
+    reviews: Review[];
+    appUsers?: any[];
+    criteriaList: any[];
+    stats: {
+        totalSubmissions: number;
+        centerAvgSatisfaction: string | number;
+        alertList: AlertItem[];
+        maintenanceCount?: number;
+        classMetrics: Record<string, any>;
+        roomFacilitySummaries?: RoomFacilitySummary[];
+    };
+    warningThreshold: number;
+    setWarningThreshold: (val: number) => void;
+    onUpdateAction: (reviewId: string, status: string, note: string) => void;
+    onAddClass: (classData: any) => void;
+    onUpdateClass: (id: string, classData: any) => void;
+    onToggleClassStatus: (id: string, currentStatus: string) => void;
+    onDeleteClass: (id: string) => void;
+    onRefreshData: () => void;
+    onDeleteTeacher: (id: string) => void;
+    onUpdateTeacher: (id: string, data: any) => void;
+}
+
+export const AdminView: React.FC<AdminViewProps> = ({ 
     classes, 
     courses, 
     teachers, 
@@ -27,7 +56,7 @@ export const AdminView = ({
     onRefreshData, 
     onDeleteTeacher,
     onUpdateTeacher
-}: any) => {
+}) => {
     const [activeTab, setActiveTab] = useState('overview');
     
     // Status and search filter
@@ -417,6 +446,15 @@ export const AdminView = ({
                                 </div>
                             </div>
                         )}
+
+                        {/* BIỂU ĐỒ THỐNG KÊ TƯƠNG QUAN CHẤT LƯỢNG (BAR CHART) - HÌNH 2.11 BÁO CÁO */}
+                        <QualityBarChart
+                            courses={courses}
+                            classMetrics={stats.classMetrics || {}}
+                            warningThreshold={warningThreshold}
+                            onSelectClass={(code) => setFilterClassSearch(code)}
+                            onSelectCourse={(courseId) => setFilterCourseId(courseId)}
+                        />
 
                         {/* Detailed Class Performance List */}
                         <div className="mb-6 flex flex-col gap-5">

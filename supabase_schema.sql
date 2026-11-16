@@ -67,7 +67,15 @@ VALUES
     ('group_5', 'Kết quả & Độ hài lòng', 'Kết quả học tập và độ hài lòng chung (Câu 25 - 30)', 5, true)
 ON CONFLICT (id) DO NOTHING;
 
--- Thiết lập Row Level Security (RLS) cơ bản
+-- 6. Tối ưu hóa chỉ mục (Indexes) & Ràng buộc chống nộp trùng (Unique Submission)
+CREATE INDEX IF NOT EXISTS idx_reviews_class_id ON public.reviews(class_id);
+CREATE INDEX IF NOT EXISTS idx_classes_course_id ON public.classes(course_id);
+CREATE INDEX IF NOT EXISTS idx_classes_teacher_id ON public.classes(teacher_id);
+
+-- Ràng buộc chống nộp trùng bài khảo sát theo từng sinh viên và lớp học (Unique Constraint qua JSONB Index)
+CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_student_submission 
+ON public.reviews (class_id, (ratings->>'student_code')) 
+WHERE (ratings->>'student_code') IS NOT NULL;
 ALTER TABLE public.app_users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.courses ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.classes ENABLE ROW LEVEL SECURITY;

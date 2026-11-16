@@ -24,6 +24,16 @@ export async function POST(request: Request) {
             }
         });
 
+        // Kiểm tra phiên người dùng gọi API qua Bearer Token nếu có
+        const authHeader = request.headers.get('authorization');
+        if (authHeader && authHeader.startsWith('Bearer ')) {
+            const token = authHeader.replace('Bearer ', '');
+            const { data: userData, error: userError } = await supabaseAdmin.auth.getUser(token);
+            if (userError || !userData.user) {
+                return NextResponse.json({ error: 'Phiên xác thực không hợp lệ hoặc đã hết hạn' }, { status: 401 });
+            }
+        }
+
         // 1. Create user in auth.users directly, completely bypassing email limits
         const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
             email,
