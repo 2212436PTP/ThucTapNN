@@ -30,10 +30,10 @@ export const QualityBarChart: React.FC<QualityBarChartProps> = ({
                 cm.classInfo?.courseId === course.id || cm.classInfo?.course_id === course.id
             );
 
-            const totalReviews = relatedMetrics.reduce((sum: number, cm: any) => sum + (cm.count || 0), 0);
+            const totalReviews = relatedMetrics.reduce((sum: number, cm: any) => sum + (Number(cm.count) || 0), 0);
             
             const validOverallScores = relatedMetrics
-                .map((cm: any) => parseFloat(cm.overallAvg))
+                .map((cm: any) => parseFloat(String(cm.overallAvg || 0)))
                 .filter(v => !isNaN(v) && v > 0);
             
             const avgOverall = validOverallScores.length > 0
@@ -41,8 +41,11 @@ export const QualityBarChart: React.FC<QualityBarChartProps> = ({
                 : 0;
 
             const validFacilityScores = relatedMetrics
-                .map((cm: any) => cm.criteriaAvgs?.facility || cm.criteriaAvgs?.group_3 || 0)
-                .filter(v => v > 0);
+                .map((cm: any) => {
+                    const fac = cm.criteriaAvgs?.facility ?? cm.criteriaAvgs?.group_3 ?? 0;
+                    return parseFloat(String(fac || 0));
+                })
+                .filter(v => !isNaN(v) && v > 0);
 
             const avgFacility = validFacilityScores.length > 0
                 ? Number((validFacilityScores.reduce((a, b) => a + b, 0) / validFacilityScores.length).toFixed(1))
@@ -64,8 +67,9 @@ export const QualityBarChart: React.FC<QualityBarChartProps> = ({
     // Dữ liệu theo Lớp học (Classes)
     const classStats = useMemo(() => {
         return Object.values(classMetrics).map((cm: any) => {
-            const avgOverall = parseFloat(cm.overallAvg) || 0;
-            const avgFacility = Number((cm.criteriaAvgs?.facility || cm.criteriaAvgs?.group_3 || 0).toFixed(1));
+            const avgOverall = parseFloat(String(cm.overallAvg || 0)) || 0;
+            const rawFacility = cm.criteriaAvgs?.facility ?? cm.criteriaAvgs?.group_3 ?? 0;
+            const avgFacility = Number((parseFloat(String(rawFacility || 0)) || 0).toFixed(1));
 
             return {
                 id: cm.classInfo?.id || cm.classInfo?.code,
