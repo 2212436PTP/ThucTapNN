@@ -14,6 +14,28 @@ import {
     ClassStudentItem 
 } from '../../lib/classMetaStorage';
 
+// Dải màu chuyển tiếp trực quan theo chuẩn Likert 5 mức độ
+function getLikertButtonClasses(star: number, isSelected: boolean): string {
+    if (isSelected) {
+        switch (star) {
+            case 1: return 'bg-rose-600 text-white border-rose-600 shadow-md scale-102 font-black';
+            case 2: return 'bg-orange-500 text-white border-orange-500 shadow-md scale-102 font-black';
+            case 3: return 'bg-amber-500 text-white border-amber-500 shadow-md scale-102 font-black';
+            case 4: return 'bg-teal-600 text-white border-teal-600 shadow-md scale-102 font-black';
+            case 5: return 'bg-emerald-600 text-white border-emerald-600 shadow-md scale-102 font-black';
+            default: return 'bg-itc-800 text-white border-itc-800 shadow-md scale-102 font-black';
+        }
+    }
+    switch (star) {
+        case 1: return 'bg-white hover:bg-rose-50/70 hover:border-rose-300 text-slate-700 border-slate-200 font-medium';
+        case 2: return 'bg-white hover:bg-orange-50/70 hover:border-orange-300 text-slate-700 border-slate-200 font-medium';
+        case 3: return 'bg-white hover:bg-amber-50/70 hover:border-amber-300 text-slate-700 border-slate-200 font-medium';
+        case 4: return 'bg-white hover:bg-teal-50/70 hover:border-teal-300 text-slate-700 border-slate-200 font-medium';
+        case 5: return 'bg-white hover:bg-emerald-50/70 hover:border-emerald-300 text-slate-700 border-slate-200 font-medium';
+        default: return 'bg-white hover:bg-slate-100 text-slate-700 border-slate-200 font-medium';
+    }
+}
+
 function SurveyContent() {
     const searchParams = useSearchParams();
     const router = useRouter();
@@ -938,11 +960,7 @@ function SurveyContent() {
                                                                                             setActiveQuestionId(section.questions[curIdx + 1].id);
                                                                                         }
                                                                                     }}
-                                                                                    className={`flex flex-col items-center justify-center py-2 sm:py-2.5 px-1 rounded-xl border text-center transition-all ${
-                                                                                        isSelected
-                                                                                            ? 'bg-itc-800 text-white border-itc-800 shadow-sm scale-102 font-black'
-                                                                                            : 'bg-white hover:bg-slate-100/80 text-slate-700 border-slate-200/90 font-medium'
-                                                                                    }`}
+                                                                                    className={`flex flex-col items-center justify-center py-2 sm:py-2.5 px-1 rounded-xl border text-center transition-all cursor-pointer ${getLikertButtonClasses(star, isSelected)}`}
                                                                                 >
                                                                                     <span className="text-xs sm:text-sm font-bold flex items-center gap-1">
                                                                                         {star} <Icons.Star className={`w-3.5 h-3.5 ${isSelected ? 'text-amber-300 fill-amber-300' : 'text-amber-500 fill-amber-500'}`} />
@@ -1135,11 +1153,7 @@ function SurveyContent() {
                                                                                         setActiveQuestionId(activeQuestions[curIdx + 1].id);
                                                                                     }
                                                                                 }}
-                                                                                className={`flex flex-col items-center justify-center py-2 sm:py-2.5 px-1 rounded-xl border text-center transition-all ${
-                                                                                    isSelected
-                                                                                        ? 'bg-itc-800 text-white border-itc-800 shadow-sm scale-102 font-black'
-                                                                                        : 'bg-white hover:bg-slate-100/80 text-slate-700 border-slate-200/90 font-medium'
-                                                                                }`}
+                                                                                className={`flex flex-col items-center justify-center py-2 sm:py-2.5 px-1 rounded-xl border text-center transition-all cursor-pointer ${getLikertButtonClasses(star, isSelected)}`}
                                                                             >
                                                                                 <span className="text-xs sm:text-sm font-bold flex items-center gap-1">
                                                                                     {star} <Icons.Star className={`w-3.5 h-3.5 ${isSelected ? 'text-amber-300 fill-amber-300' : 'text-amber-500 fill-amber-500'}`} />
@@ -1204,6 +1218,13 @@ function SurveyContent() {
                 {/* Sticky Bottom Submit Bar */}
                 {!isClosed && activeQuestions.length > 0 && (
                     <footer className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-slate-200 py-3.5 px-4 z-30 shadow-lg">
+                        {/* Dynamic Progress Bar on top of sticky footer */}
+                        <div className="absolute top-0 left-0 right-0 h-1 bg-slate-100">
+                            <div 
+                                className="h-full bg-gradient-to-r from-amber-500 to-emerald-500 transition-all duration-300"
+                                style={{ width: `${activeQuestions.length > 0 ? (answeredCount / activeQuestions.length) * 100 : 0}%` }}
+                            />
+                        </div>
                         <div className="max-w-3xl mx-auto flex items-center justify-between gap-4">
                             <div>
                                 <p className="text-xs text-slate-500">Tiến độ:</p>

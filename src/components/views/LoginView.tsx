@@ -8,6 +8,20 @@ export const LoginView = ({ onLoginSuccess }: { onLoginSuccess: () => void }) =>
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
 
+    const fillDemoAccount = (role: 'ADMIN' | 'TEACHER' | 'STUDENT') => {
+        setError('');
+        if (role === 'ADMIN') {
+            setAccountInput('admin@itc.edu.vn');
+            setPassword('123456');
+        } else if (role === 'TEACHER') {
+            setAccountInput('thanhtung@dlu.edu.vn');
+            setPassword('123456');
+        } else if (role === 'STUDENT') {
+            setAccountInput('2110452');
+            setPassword('123456');
+        }
+    };
+
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
         setIsLoading(true);
@@ -69,6 +83,53 @@ export const LoginView = ({ onLoginSuccess }: { onLoginSuccess: () => void }) =>
                 </div>
                 
                 <div className="p-8">
+                    {/* BỘ NÚT 1-CLICK TỰ ĐIỀN TÀI KHOẢN DEMO PHỤC VỤ BÁO CÁO HỘI ĐỒNG */}
+                    <div className="mb-5 p-3.5 bg-slate-50 border border-slate-200/90 rounded-2xl shadow-2xs">
+                        <div className="flex items-center justify-between gap-1 mb-2.5">
+                            <span className="text-[10px] font-black uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+                                <Icons.Star className="w-3.5 h-3.5 text-amber-500 fill-amber-500" /> Chọn nhanh tài khoản Demo (1-Click)
+                            </span>
+                            <span className="text-[9px] font-semibold text-slate-400">Tự điền 3 Role</span>
+                        </div>
+                        <div className="grid grid-cols-3 gap-1.5">
+                            <button
+                                type="button"
+                                onClick={() => fillDemoAccount('ADMIN')}
+                                className="flex flex-col items-center justify-center p-2 rounded-xl border border-rose-200 bg-rose-50/80 hover:bg-rose-100 text-rose-800 transition text-center cursor-pointer shadow-2xs group"
+                                title="Đăng nhập Ban Quản Trị ITC (admin@itc.edu.vn)"
+                            >
+                                <span className="text-[11px] font-black flex items-center gap-1">
+                                    <Icons.Shield className="w-3.5 h-3.5 text-rose-600" /> Admin
+                                </span>
+                                <span className="text-[9px] text-rose-600/80 font-medium truncate max-w-full">Ban QL ITC</span>
+                            </button>
+
+                            <button
+                                type="button"
+                                onClick={() => fillDemoAccount('TEACHER')}
+                                className="flex flex-col items-center justify-center p-2 rounded-xl border border-blue-200 bg-blue-50/80 hover:bg-blue-100 text-blue-800 transition text-center cursor-pointer shadow-2xs group"
+                                title="Đăng nhập Giảng viên (thanhtung@dlu.edu.vn)"
+                            >
+                                <span className="text-[11px] font-black flex items-center gap-1">
+                                    <Icons.User className="w-3.5 h-3.5 text-blue-600" /> Giảng viên
+                                </span>
+                                <span className="text-[9px] text-blue-600/80 font-medium truncate max-w-full">PGS. Tùng</span>
+                            </button>
+
+                            <button
+                                type="button"
+                                onClick={() => fillDemoAccount('STUDENT')}
+                                className="flex flex-col items-center justify-center p-2 rounded-xl border border-emerald-200 bg-emerald-50/80 hover:bg-emerald-100 text-emerald-800 transition text-center cursor-pointer shadow-2xs group"
+                                title="Đăng nhập Sinh viên (2110452 - Minh Châu)"
+                            >
+                                <span className="text-[11px] font-black flex items-center gap-1">
+                                    <Icons.GraduationCap className="w-3.5 h-3.5 text-emerald-600" /> Sinh viên
+                                </span>
+                                <span className="text-[9px] text-emerald-600/80 font-medium truncate max-w-full">2110452</span>
+                            </button>
+                        </div>
+                    </div>
+
                     <form onSubmit={handleLogin} className="space-y-5">
                         {error && (
                             <div className="p-3 bg-rose-50 text-rose-600 text-xs font-semibold rounded-lg border border-rose-200 flex items-center gap-2">
