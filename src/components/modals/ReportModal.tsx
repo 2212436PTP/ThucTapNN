@@ -24,7 +24,8 @@ export const ReportModal = ({
 }: ReportModalProps) => {
     const [downloading, setDownloading] = useState(false);
 
-    // BỘ LỌC ĐA CHIỀU
+    // BỘ LỌC ĐA CHIỀU & TÌM KIẾM NHANH
+    const [searchKeyword, setSearchKeyword] = useState<string>('');
     const [selectedClassId, setSelectedClassId] = useState<string>('ALL');
     const [selectedTeacherId, setSelectedTeacherId] = useState<string>('ALL');
     const [selectedRatingFilter, setSelectedRatingFilter] = useState<string>('ALL'); // ALL, ALERT, 1, 2, 3, 4, 5
@@ -37,10 +38,10 @@ export const ReportModal = ({
     const [currentPage, setCurrentPage] = useState<number>(1);
     const [pageSize, setPageSize] = useState<number>(10); // 10, 20, 50, hoặc 0 (Tất cả)
 
-    // Tự động quay về trang 1 khi người dùng đổi tiêu chí lọc
+    // Tự động quay về trang 1 khi người dùng đổi tiêu chí lọc hoặc tìm kiếm
     useEffect(() => {
         setCurrentPage(1);
-    }, [selectedClassId, selectedTeacherId, selectedRatingFilter, selectedSemester, startDate, endDate, reportViewMode]);
+    }, [selectedClassId, selectedTeacherId, selectedRatingFilter, selectedSemester, startDate, endDate, reportViewMode, searchKeyword]);
 
     // Lấy danh sách Học kỳ / Niên khóa duy nhất
     const semesterOptions = useMemo(() => {
@@ -83,13 +84,17 @@ export const ReportModal = ({
         }
     };
 
-    // Helper: Tính điểm trung bình 1 bài review
+    // Helper: Tính điểm trung bình 1 bài review (Chỉ tính các câu hỏi Likert 1-5 sao, loại bỏ hoàn toàn MSSV/tên/meta)
     const calculateReviewAvg = (ratings: Record<string, any>) => {
         if (!ratings) return 5.0;
         const vals = Object.entries(ratings)
-            .filter(([k]) => !k.startsWith('group_'))
-            .map(([, v]) => typeof v === 'number' ? v : parseFloat(v))
-            .filter(v => !isNaN(v) && v > 0);
+            .filter(([k]) => {
+                if (['student_code', 'student_name', 'studentCode', 'studentName', 'mssv', 'name', 'submitted_at', 'submittedAt', 'timestamp', 'comment', 'assetLocation', 'role', 'class_id', 'classId'].includes(k)) return false;
+                if (k.startsWith('group_') || k.startsWith('student_') || k.startsWith('meta_')) return false;
+                return true;
+            })
+            .map(([, v]) => typeof v === 'number' ? v : parseFloat(String(v)))
+            .filter(v => !isNaN(v) && v >= 1 && v <= 5);
         if (vals.length === 0) return 5.0;
         return Number((vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(1));
     };
@@ -116,6 +121,17 @@ export const ReportModal = ({
                 formattedTime: formatDateTime(r.createdAt || r.created_at)
             };
         }).filter(r => {
+            // Lọc theo Từ khóa tìm kiếm (Mã lớp, Giảng viên, Môn học, Phòng máy, Ý kiến)
+            if (searchKeyword.trim()) {
+                const kw = searchKeyword.toLowerCase().trim();
+                const matchClass = r.classCode.toLowerCase().includes(kw);
+                const matchCourse = r.courseName.toLowerCase().includes(kw);
+                const matchTeacher = r.teacherName.toLowerCase().includes(kw);
+                const matchRoom = (r.room || '').toLowerCase().includes(kw);
+                const matchComment = (r.comment || '').toLowerCase().includes(kw);
+                if (!matchClass && !matchCourse && !matchTeacher && !matchRoom && !matchComment) return false;
+            }
+
             // Lọc theo Lớp
             if (selectedClassId !== 'ALL' && r.classId !== selectedClassId) return false;
 
@@ -149,7 +165,7 @@ export const ReportModal = ({
 
             return true;
         });
-    }, [reviews, classes, courses, teachers, selectedClassId, selectedTeacherId, selectedRatingFilter, selectedSemester, startDate, endDate, warningThreshold]);
+    }, [reviews, classes, courses, teachers, selectedClassId, selectedTeacherId, selectedRatingFilter, selectedSemester, startDate, endDate, warningThreshold, searchKeyword]);
 
     // DỮ LIỆU ĐIỂM NÓNG BẢO TRÌ (ALERTS) ĐÃ LỌC
     const filteredAlerts = useMemo(() => {
@@ -157,6 +173,17 @@ export const ReportModal = ({
         return rawAlerts.filter((a: any) => {
             const cls = classes.find(c => c.id === a.classId || c.code === a.classCode);
             const assignedTeacherIds = cls?.teacherIds || (cls?.teacherId ? [cls.teacherId] : []);
+
+            // Lọc theo Từ khóa tìm kiếm
+            if (searchKeyword.trim()) {
+                const kw = searchKeyword.toLowerCase().trim();
+                const matchClass = (a.classCode || cls?.code || '').toLowerCase().includes(kw);
+                const matchCourse = (a.courseName || a.className || '').toLowerCase().includes(kw);
+                const matchTeacher = (a.teacherName || '').toLowerCase().includes(kw);
+                const matchRoom = (a.room || cls?.room || '').toLowerCase().includes(kw);
+                const matchDesc = (a.title || a.description || a.criteriaName || '').toLowerCase().includes(kw);
+                if (!matchClass && !matchCourse && !matchTeacher && !matchRoom && !matchDesc) return false;
+            }
 
             if (selectedClassId !== 'ALL' && a.classId && a.classId !== selectedClassId) return false;
             if (selectedTeacherId !== 'ALL' && !assignedTeacherIds.includes(selectedTeacherId)) return false;
@@ -184,7 +211,7 @@ export const ReportModal = ({
 
             return true;
         });
-    }, [stats?.alertList, classes, selectedClassId, selectedTeacherId, selectedRatingFilter, selectedSemester, startDate, endDate, warningThreshold]);
+    }, [stats?.alertList, classes, selectedClassId, selectedTeacherId, selectedRatingFilter, selectedSemester, startDate, endDate, warningThreshold, searchKeyword]);
 
     // PHÂN TRANG DANH SÁCH KHẢO SÁT & SỰ CỐ
     const totalReviewItems = filteredReviews.length;
@@ -1005,9 +1032,67 @@ export const ReportModal = ({
                     </button>
                 </div>
 
-                {/* THANH BỘ LỌC ĐA TIÊU CHÍ & KHOẢNG THỜI GIAN ĐÁNH GIÁ */}
-                <div className="bg-slate-50 border-b border-slate-200 px-6 py-3.5 shrink-0 space-y-2.5">
-                    {/* Hàng 1: Lớp, Giảng viên, Đánh giá sao, Học kỳ */}
+                {/* THANH BỘ LỌC ĐA TIÊU CHÍ, TÌM KIẾM THEO LỚP/GIẢNG VIÊN & KHOẢNG THỜI GIAN */}
+                <div className="bg-slate-50 border-b border-slate-200 px-6 py-3.5 shrink-0 space-y-3">
+                    
+                    {/* HÀNG 1: Ô TÌM KIẾM NHANH (SEARCH BAR) + CHUYỂN ĐỔI CHẾ ĐỘ XEM */}
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pb-2.5 border-b border-slate-200/80">
+                        {/* Ô TÌM KIẾM THEO LỚP, GIẢNG VIÊN, MÔN HỌC, PHÒNG LAB */}
+                        <div className="relative flex-1">
+                            <Icons.Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                            <input
+                                type="text"
+                                value={searchKeyword}
+                                onChange={e => setSearchKeyword(e.target.value)}
+                                placeholder="Tìm kiếm nhanh theo mã lớp (VD: 2027), tên giảng viên, môn học, phòng lab..."
+                                className="w-full bg-white border border-slate-200 rounded-xl pl-9 pr-9 py-2 text-xs font-semibold text-slate-800 placeholder-slate-400 focus:outline-none focus:border-itc-500 shadow-2xs"
+                            />
+                            {searchKeyword && (
+                                <button
+                                    type="button"
+                                    onClick={() => setSearchKeyword('')}
+                                    className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 rounded-full bg-slate-200 text-slate-600 hover:bg-slate-300 flex items-center justify-center text-[10px] font-bold"
+                                    title="Xóa tìm kiếm"
+                                >
+                                    ×
+                                </button>
+                            )}
+                        </div>
+
+                        {/* Chế độ xem: One-Pager điều hành vs Phiếu khảo sát vs Điểm nóng bảo trì */}
+                        <div className="flex bg-slate-200/80 p-0.5 rounded-xl shrink-0">
+                            <button
+                                type="button"
+                                onClick={() => setReportViewMode('ONE_PAGER')}
+                                className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all ${
+                                    reportViewMode === 'ONE_PAGER' ? 'bg-white text-emerald-800 shadow-xs font-black' : 'text-slate-600 hover:text-slate-900'
+                                }`}
+                                title="Xem Báo cáo tóm tắt điều hành 1 trang gồm 3 khối trọng tâm"
+                            >
+                                One-Pager (1 Trang)
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setReportViewMode('REVIEWS')}
+                                className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all ${
+                                    reportViewMode === 'REVIEWS' ? 'bg-white text-itc-900 shadow-xs font-black' : 'text-slate-600 hover:text-slate-900'
+                                }`}
+                            >
+                                Phiếu ({filteredReviews.length})
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setReportViewMode('ALERTS')}
+                                className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all ${
+                                    reportViewMode === 'ALERTS' ? 'bg-white text-rose-700 shadow-xs font-black' : 'text-slate-600 hover:text-slate-900'
+                                }`}
+                            >
+                                Sự cố ({filteredAlerts.length})
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* HÀNG 2: 4 DROPDOWN LỌC CHUYÊN SÂU */}
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 items-center">
                         {/* 1. Lọc theo Lớp */}
                         <div>
@@ -1073,91 +1158,55 @@ export const ReportModal = ({
                         </div>
                     </div>
 
-                    {/* Hàng 2: Tìm kiếm ngày đánh giá (Từ ngày -> Đến ngày) & Chế độ xem */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 items-end pt-1.5 border-t border-slate-200/70">
-                        {/* Từ ngày */}
-                        <div>
-                            <label className="text-[10px] font-bold text-slate-600 uppercase flex items-center justify-between mb-1">
-                                <span className="flex items-center gap-1">
-                                    <Icons.Clock className="w-3 h-3 text-itc-800" /> Từ ngày đánh giá:
+                    {/* HÀNG 3: KHOẢNG THỜI GIAN ĐÁNH GIÁ (TỪ NGÀY -> ĐẾN NGÀY) */}
+                    <div className="flex flex-wrap items-center justify-between gap-2.5 pt-1.5 border-t border-slate-200/70 text-xs">
+                        <div className="flex flex-wrap items-center gap-3">
+                            {/* Từ ngày */}
+                            <div className="flex items-center gap-1.5">
+                                <span className="text-[10px] font-bold text-slate-600 uppercase flex items-center gap-1">
+                                    <Icons.Clock className="w-3 h-3 text-itc-800" /> Từ ngày:
                                 </span>
-                            </label>
-                            <input
-                                type="date"
-                                value={startDate}
-                                onChange={e => setStartDate(e.target.value)}
-                                className="w-full bg-white border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs font-semibold text-slate-800 focus:border-itc-500 outline-none"
-                            />
-                        </div>
+                                <input
+                                    type="date"
+                                    value={startDate}
+                                    onChange={e => setStartDate(e.target.value)}
+                                    className="bg-white border border-slate-200 rounded-lg px-2 py-1 text-xs font-semibold text-slate-800 focus:border-itc-500 outline-none"
+                                />
+                            </div>
 
-                        {/* Đến ngày */}
-                        <div>
-                            <label className="text-[10px] font-bold text-slate-600 uppercase flex items-center justify-between mb-1">
-                                <span className="flex items-center gap-1">
-                                    <Icons.Clock className="w-3 h-3 text-itc-800" /> Đến ngày đánh giá:
+                            {/* Đến ngày */}
+                            <div className="flex items-center gap-1.5">
+                                <span className="text-[10px] font-bold text-slate-600 uppercase flex items-center gap-1">
+                                    <Icons.Clock className="w-3 h-3 text-itc-800" /> Đến ngày:
                                 </span>
-                            </label>
-                            <input
-                                type="date"
-                                value={endDate}
-                                onChange={e => setEndDate(e.target.value)}
-                                className="w-full bg-white border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs font-semibold text-slate-800 focus:border-itc-500 outline-none"
-                            />
-                        </div>
+                                <input
+                                    type="date"
+                                    value={endDate}
+                                    onChange={e => setEndDate(e.target.value)}
+                                    className="bg-white border border-slate-200 rounded-lg px-2 py-1 text-xs font-semibold text-slate-800 focus:border-itc-500 outline-none"
+                                />
+                            </div>
 
-                        {/* Nút reset ngày hoặc ghi chú */}
-                        <div className="flex items-center">
-                            {(startDate || endDate) ? (
+                            {/* Nút reset ngày hoặc ghi chú */}
+                            {(startDate || endDate) && (
                                 <button
                                     type="button"
                                     onClick={() => { setStartDate(''); setEndDate(''); }}
-                                    className="w-full py-1.5 px-3 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-bold transition flex items-center justify-center gap-1.5"
+                                    className="py-1 px-2.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-[11px] font-bold transition flex items-center gap-1"
                                     title="Xóa bộ lọc khoảng ngày để xem toàn bộ"
                                 >
-                                    <span className="flex items-center justify-center gap-1">
-                                        <Icons.X className="w-3.5 h-3.5" /> Xóa lọc ngày
-                                    </span>
+                                    <Icons.X className="w-3 h-3" /> Xóa lọc ngày
                                 </button>
-                            ) : (
-                                <div className="text-[11px] text-slate-400 italic py-1.5">
-                                    (Hiển thị toàn bộ các mốc thời gian)
-                                </div>
                             )}
                         </div>
 
-                        {/* Chế độ xem: One-Pager điều hành vs Phiếu khảo sát vs Điểm nóng bảo trì */}
-                        <div>
-                            <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Chế độ hiển thị:</label>
-                            <div className="flex bg-slate-200/80 p-0.5 rounded-xl">
-                                <button
-                                    type="button"
-                                    onClick={() => setReportViewMode('ONE_PAGER')}
-                                    className={`flex-1 py-1 text-[11px] font-bold rounded-lg transition-all ${
-                                        reportViewMode === 'ONE_PAGER' ? 'bg-white text-emerald-800 shadow-xs font-black' : 'text-slate-600'
-                                    }`}
-                                    title="Xem Báo cáo tóm tắt điều hành 1 trang gồm 3 khối trọng tâm"
-                                >
-                                    One-Pager (1 Trang)
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => setReportViewMode('REVIEWS')}
-                                    className={`flex-1 py-1 text-[11px] font-bold rounded-lg transition-all ${
-                                        reportViewMode === 'REVIEWS' ? 'bg-white text-itc-900 shadow-xs' : 'text-slate-600'
-                                    }`}
-                                >
-                                    Phiếu ({filteredReviews.length})
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => setReportViewMode('ALERTS')}
-                                    className={`flex-1 py-1 text-[11px] font-bold rounded-lg transition-all ${
-                                        reportViewMode === 'ALERTS' ? 'bg-white text-rose-700 shadow-xs' : 'text-slate-600'
-                                    }`}
-                                >
-                                    Sự cố ({filteredAlerts.length})
-                                </button>
-                            </div>
+                        {/* Tổng số kết quả phù hợp */}
+                        <div className="text-[11px] font-semibold text-slate-500">
+                            {searchKeyword ? (
+                                <span>Tìm kiếm: <b className="text-itc-800">"{searchKeyword}"</b> ({filteredReviews.length} phiếu, {filteredAlerts.length} sự cố)</span>
+                            ) : (
+                                <span className="text-slate-400 italic">Hiển thị toàn bộ dữ liệu theo bộ lọc</span>
+                            )}
                         </div>
                     </div>
                 </div>
