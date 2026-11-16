@@ -435,40 +435,6 @@ export default function App() {
         }
     };
 
-    const handleSwitchRole = (newRole: 'ADMIN' | 'TEACHER' | 'STUDENT') => {
-        setRole(newRole);
-        if (newRole === 'ADMIN') {
-            const adminUser = appUsers.find(u => u.role === 'ADMIN') || {
-                id: 'admin_itc',
-                name: 'Ban Quản Trị ITC',
-                email: 'admin@itc.edu.vn',
-                role: 'ADMIN'
-            };
-            setCurrentUser(adminUser);
-            triggerToast('Đã chuyển sang góc nhìn Ban Quản Trị ITC');
-        } else if (newRole === 'TEACHER') {
-            const sampleTeacher = teachers.find((t: any) => t.email?.includes('tung') || t.email?.includes('thanhtung')) || teachers[0] || {
-                id: 't_sample',
-                name: 'ThS. Nguyễn Thanh Tùng',
-                email: 'thanhtung@dlu.edu.vn',
-                role: 'TEACHER'
-            };
-            setCurrentUser(sampleTeacher);
-            setSelectedTeacherId(sampleTeacher.id);
-            triggerToast(`Đã chuyển sang góc nhìn Giảng viên: ${sampleTeacher.name}`);
-        } else if (newRole === 'STUDENT') {
-            const sampleStudent = appUsers.find(u => u.role === 'STUDENT') || {
-                id: 'stu_sample',
-                name: 'Nguyễn Hoàng Minh Châu',
-                code: '2110452',
-                email: '2110452@sinhvien.dlu.edu.vn',
-                role: 'STUDENT'
-            };
-            setCurrentUser(sampleStudent);
-            triggerToast(`Đã chuyển sang góc nhìn Sinh viên: ${sampleStudent.name} (${sampleStudent.code})`);
-        }
-    };
-
     const handleLogout = async () => {
         await supabase.auth.signOut();
         setCurrentUser(null);
@@ -551,52 +517,29 @@ export default function App() {
                         </div>
                     </div>
 
-                    {/* BỘ CHUYỂN NHANH 3 ROLE PHỤC VỤ BÁO CÁO HỘI ĐỒNG (1-CLICK ROLE SWITCHER) */}
-                    <div className="hidden sm:flex items-center bg-slate-100/90 p-0.5 rounded-xl border border-slate-200 shadow-2xs">
-                        <button
-                            type="button"
-                            onClick={() => handleSwitchRole('ADMIN')}
-                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                                role === 'ADMIN'
-                                    ? 'bg-white text-itc-900 shadow-xs scale-102 font-black border border-slate-200'
-                                    : 'text-slate-600 hover:text-slate-900'
-                            }`}
-                            title="Xem giao diện Ban Quản Trị ITC / Kỹ thuật viên / Quản lý"
-                        >
-                            <Icons.Shield className="w-3.5 h-3.5 text-itc-700" />
-                            <span>Admin ITC</span>
-                        </button>
-
-                        <button
-                            type="button"
-                            onClick={() => handleSwitchRole('TEACHER')}
-                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                                role === 'TEACHER'
-                                    ? 'bg-white text-blue-900 shadow-xs scale-102 font-black border border-slate-200'
-                                    : 'text-slate-600 hover:text-slate-900'
-                            }`}
-                            title="Xem giao diện Giảng viên phụ trách lớp học"
-                        >
-                            <Icons.User className="w-3.5 h-3.5 text-blue-600" />
-                            <span>Giảng viên</span>
-                        </button>
-
-                        <button
-                            type="button"
-                            onClick={() => handleSwitchRole('STUDENT')}
-                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                                role === 'STUDENT'
-                                    ? 'bg-white text-emerald-900 shadow-xs scale-102 font-black border border-slate-200'
-                                    : 'text-slate-600 hover:text-slate-900'
-                            }`}
-                            title="Xem giao diện Cổng khảo sát Sinh viên"
-                        >
-                            <Icons.GraduationCap className="w-3.5 h-3.5 text-emerald-600" />
-                            <span>Sinh viên</span>
-                        </button>
-                    </div>
-
                     <div className="flex items-center gap-2 lg:gap-3">
+                        {/* HUY HIỆU DANH TÍNH ROLE CHUẨN MỰC THEO NGƯỜI DÙNG ĐĂNG NHẬP */}
+                        {role === 'ADMIN' && (
+                            <span className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 text-slate-800 text-xs font-bold border border-slate-200 shadow-2xs">
+                                <Icons.Shield className="w-3.5 h-3.5 text-itc-800" />
+                                <span>Ban Quản Trị ITC</span>
+                            </span>
+                        )}
+
+                        {role === 'TEACHER' && (
+                            <span className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-50 text-blue-900 text-xs font-bold border border-blue-200 shadow-2xs">
+                                <Icons.User className="w-3.5 h-3.5 text-blue-700" />
+                                <span>{currentUser?.name || 'Giảng viên ITC'}</span>
+                            </span>
+                        )}
+
+                        {role === 'STUDENT' && (
+                            <span className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 text-emerald-900 text-xs font-bold border border-emerald-200 shadow-2xs">
+                                <Icons.GraduationCap className="w-3.5 h-3.5 text-emerald-700" />
+                                <span>{currentUser?.name || 'Sinh viên'} {currentUser?.code ? `(${currentUser.code})` : ''}</span>
+                            </span>
+                        )}
+
                         {/* CHUÔNG THÔNG BÁO CHO TỪNG ROLE (ADMIN / TEACHER / STUDENT) */}
                         <NotificationBell
                             role={role as any}
