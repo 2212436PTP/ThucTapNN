@@ -140,36 +140,63 @@ export const AdminView: React.FC<AdminViewProps> = ({
     const filteredBadReviews = useMemo(() => {
         return reviews.filter((r: any) => {
             const cls = classes.find((c: any) => c.id === r.classId);
+            const course = courses.find((cr: any) => cr.id === cls?.courseId);
             const rAvg = getReviewAvg(r.ratings);
             const isHard = isHardwareReview(r);
 
-            // Category filter
+            // 1. Phân loại Category
             if (reviewsCategoryFilter === 'HARDWARE' && !isHard) return false;
             if (reviewsCategoryFilter === 'WARNING' && rAvg > 2.5 && !Object.values(r.ratings || {}).some((s: any) => s <= 2)) return false;
             if (reviewsCategoryFilter === 'ESCALATED' && !r.isEscalated) return false;
             if (reviewsCategoryFilter === 'IN_PROGRESS' && r.status !== 'IN_PROGRESS') return false;
             if (reviewsCategoryFilter === 'RESOLVED' && r.status !== 'RESOLVED') return false;
 
-            // Star rating filter
+            // 2. Thang điểm sao
             if (reviewsStarFilter === '1-2' && rAvg > 2.5) return false;
             if (reviewsStarFilter === '3' && (rAvg <= 2.5 || rAvg > 3.5)) return false;
             if (reviewsStarFilter === '4-5' && rAvg <= 3.5) return false;
 
-            // Lọc cơ bản
-            const hasBad = Object.values(r.ratings || {}).some((s: any) => s <= 2);
-            const hasComment = r.comment && r.comment.trim().length > 0;
-            
-            if (reviewsCategoryFilter === 'ALL' && !hasBad && !hasComment && !r.isEscalated && !isHard) return false;
-            
+            // 3. Trạng thái xử lý
             if (filterStatus !== 'ALL' && r.status !== filterStatus) return false;
+
+            // 4. Khóa / Môn học
             if (filterCourseId !== 'ALL' && cls?.courseId !== filterCourseId) return false;
+
+            // 5. Niên khóa
             if (filterAcademicYear !== 'ALL' && (cls?.academicYear || '2026') !== filterAcademicYear) return false;
-            if (filterClassSearch && !cls?.code.toLowerCase().includes(filterClassSearch.toLowerCase())) return false;
-            if (searchTerm && !r.comment?.toLowerCase().includes(searchTerm.toLowerCase())) return false;
-            
+
+            // 6. Ô TÌM KIẾM TOÀN NĂNG THẬT SỰ (Tìm theo mã lớp, môn học, giảng viên, phòng lab, vị trí máy, ý kiến, MSSV, ghi chú)
+            const activeKw = (searchTerm || filterClassSearch || '').trim().toLowerCase();
+            if (activeKw) {
+                const teacherNames = cls ? getTeacherNames(cls).toLowerCase() : '';
+                const studentCode = (r.ratings?.student_code || r.ratings?.studentCode || r.ratings?.mssv || '').toLowerCase();
+                const studentName = (r.ratings?.student_name || r.ratings?.studentName || '').toLowerCase();
+                const assetLoc = (r.ratings?.asset_location || '').toLowerCase();
+                const room = (cls?.room || '').toLowerCase();
+                const classCode = (cls?.code || '').toLowerCase();
+                const courseName = (course?.name || '').toLowerCase();
+                const commentText = (r.comment || '').toLowerCase();
+                const actionNote = (r.actionNote || '').toLowerCase();
+                const teacherNote = (r.teacherNote || '').toLowerCase();
+
+                const matched = 
+                    classCode.includes(activeKw) ||
+                    courseName.includes(activeKw) ||
+                    teacherNames.includes(activeKw) ||
+                    room.includes(activeKw) ||
+                    assetLoc.includes(activeKw) ||
+                    studentCode.includes(activeKw) ||
+                    studentName.includes(activeKw) ||
+                    commentText.includes(activeKw) ||
+                    actionNote.includes(activeKw) ||
+                    teacherNote.includes(activeKw);
+
+                if (!matched) return false;
+            }
+
             return true;
         });
-    }, [reviews, classes, reviewsCategoryFilter, reviewsStarFilter, filterStatus, filterCourseId, filterAcademicYear, filterClassSearch, searchTerm]);
+    }, [reviews, classes, courses, teachers, reviewsCategoryFilter, reviewsStarFilter, filterStatus, filterCourseId, filterAcademicYear, searchTerm, filterClassSearch]);
 
     const escalatedReviews = useMemo(() => {
         return reviews.filter((r: any) => r.isEscalated && r.status !== 'RESOLVED');
@@ -256,8 +283,8 @@ export const AdminView: React.FC<AdminViewProps> = ({
                     </div>
                 </div>
 
-                {/* SHARED MULTI-CRITERIA FILTER BAR (Dành cho Xem lại đánh giá & Bảng điều khiển) */}
-                {(activeTab === 'overview' || activeTab === 'reviews') && (
+                {/* BỘ LỌC DÀNH RIÊNG CHO BẢNG ĐIỀU KHIỂN (OVERVIEW) */}
+                {activeTab === 'overview' && (
                     <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs mb-6 flex flex-wrap items-center justify-between gap-3">
                         <div className="flex flex-wrap items-center gap-3">
                             <div className="flex items-center gap-1.5">
@@ -562,7 +589,7 @@ export const AdminView: React.FC<AdminViewProps> = ({
                                                     <div className="mt-3.5 flex items-center gap-2 flex-wrap">
                                                         <button 
                                                             onClick={() => {
-                                                                setFilterClassSearch(cm.classInfo.code);
+                                                                setSearchTerm(cm.classInfo.code);
                                                                 setActiveTab('reviews');
                                                             }}
                                                             className="text-xs font-bold text-itc-700 hover:text-itc-900 underline decoration-itc-300 underline-offset-2 flex items-center gap-1"
@@ -762,9 +789,37 @@ export const AdminView: React.FC<AdminViewProps> = ({
                                 </button>
                             </div>
 
-                            {/* Hàng 2: Bộ lọc Sao, Trạng thái & Ô Tìm kiếm */}
-                            <div className="flex flex-wrap justify-between items-center gap-3">
+                            {/* Hàng 2: Bộ lọc Môn học, Niên khóa, Sao, Trạng thái & Ô Tìm kiếm DUY NHẤT */}
+                            <div className="flex flex-wrap justify-between items-center gap-3 pt-1">
                                 <div className="flex flex-wrap items-center gap-2.5">
+                                    <div className="flex items-center gap-1.5">
+                                        <span className="text-xs font-bold text-slate-600">Môn học:</span>
+                                        <select 
+                                            value={filterCourseId} 
+                                            onChange={(e) => setFilterCourseId(e.target.value)}
+                                            className="border border-slate-200 rounded-lg text-xs p-1.5 font-bold bg-slate-50 focus:outline-none focus:ring-1 focus:ring-itc-600"
+                                        >
+                                            <option value="ALL">Tất cả môn học</option>
+                                            {courses.map((c: any) => (
+                                                <option key={c.id} value={c.id}>{c.name}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+
+                                    <div className="flex items-center gap-1.5">
+                                        <span className="text-xs font-bold text-slate-600">Niên khóa:</span>
+                                        <select 
+                                            value={filterAcademicYear} 
+                                            onChange={(e) => setFilterAcademicYear(e.target.value)}
+                                            className="border border-slate-200 rounded-lg text-xs p-1.5 font-bold bg-slate-50 focus:outline-none focus:ring-1 focus:ring-itc-600"
+                                        >
+                                            <option value="ALL">Tất cả niên khóa</option>
+                                            {academicYears.map((yr: string) => (
+                                                <option key={yr} value={yr}>{yr}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+
                                     <div className="flex items-center gap-1.5">
                                         <span className="text-xs font-bold text-slate-600">Thang điểm:</span>
                                         <select
@@ -792,17 +847,47 @@ export const AdminView: React.FC<AdminViewProps> = ({
                                             <option value="RESOLVED">Đã khắc phục hoàn tất</option>
                                         </select>
                                     </div>
+
+                                    {(filterCourseId !== 'ALL' || filterAcademicYear !== 'ALL' || reviewsStarFilter !== 'ALL' || filterStatus !== 'ALL' || searchTerm || reviewsCategoryFilter !== 'ALL') && (
+                                        <button 
+                                            type="button"
+                                            onClick={() => {
+                                                setFilterCourseId('ALL');
+                                                setFilterAcademicYear('ALL');
+                                                setReviewsStarFilter('ALL');
+                                                setFilterStatus('ALL');
+                                                setReviewsCategoryFilter('ALL');
+                                                setSearchTerm('');
+                                                setFilterClassSearch('');
+                                            }}
+                                            className="text-[11px] font-bold text-rose-600 hover:underline cursor-pointer"
+                                            title="Khôi phục tất cả bộ lọc về mặc định"
+                                        >
+                                            Đặt lại bộ lọc
+                                        </button>
+                                    )}
                                 </div>
 
-                                <div className="relative w-full sm:w-72">
+                                {/* Ô TÌM KIẾM DUY NHẤT TOÀN NĂNG */}
+                                <div className="relative w-full sm:w-80">
                                     <input 
                                         type="text" 
-                                        placeholder="Tìm theo ý kiến, thiết bị, phòng máy..."
+                                        placeholder="Tìm mã lớp (VD: 2027), môn, GV, phòng lab, ý kiến, MSSV..."
                                         value={searchTerm}
                                         onChange={(e) => setSearchTerm(e.target.value)}
-                                        className="w-full pl-8 pr-3 py-1.5 border border-slate-200 rounded-xl text-xs bg-slate-50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-itc-600 font-medium"
+                                        className="w-full pl-8 pr-7 py-1.5 border border-slate-200 rounded-xl text-xs bg-slate-50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-itc-600 font-medium placeholder-slate-400"
                                     />
                                     <span className="absolute left-2.5 top-2 text-slate-400"><Icons.Search className="w-3.5 h-3.5" /></span>
+                                    {searchTerm && (
+                                        <button 
+                                            type="button"
+                                            onClick={() => setSearchTerm('')}
+                                            className="absolute right-2 top-1.5 text-slate-400 hover:text-slate-600 w-4 h-4 rounded-full bg-slate-200 flex items-center justify-center text-[10px] font-bold"
+                                            title="Xóa tìm kiếm"
+                                        >
+                                            ×
+                                        </button>
+                                    )}
                                 </div>
                             </div>
                         </div>
@@ -1345,7 +1430,7 @@ export const AdminView: React.FC<AdminViewProps> = ({
                     onViewClassReviews={(classId) => {
                         const cls = classes.find((c: any) => c.id === classId);
                         if (cls) {
-                            setFilterClassSearch(cls.code);
+                            setSearchTerm(cls.code);
                         }
                         setActiveTab('reviews');
                         setShowSeatMapModal(false);
