@@ -193,7 +193,7 @@ export const AdminView: React.FC<AdminViewProps> = ({
     // Thêm bộ lọc nhanh cho danh sách lớp trong Bảng điều khiển
     const displayClassMetrics = useMemo(() => {
         return filteredClassMetrics.filter((cm: any) => {
-            if (overviewClassFilter === 'OPEN') return cm.classInfo.status === 'OPEN';
+            if (overviewClassFilter === 'OPEN') return cm.classInfo.status === 'OPEN' || cm.classInfo.status === 'OPEN_SURVEY';
             if (overviewClassFilter === 'WARNING') return cm.overallAvg > 0 && cm.overallAvg < warningThreshold;
             if (overviewClassFilter === 'HIGH_PROGRESS') {
                 const percent = (cm.classInfo.studentsCount || 30) > 0 ? (cm.count / (cm.classInfo.studentsCount || 30)) * 100 : 0;
@@ -489,7 +489,7 @@ export const AdminView: React.FC<AdminViewProps> = ({
                                         }`}
                                     >
                                         <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                                        Đang mở KS ({filteredClassMetrics.filter((m: any) => m.classInfo.status === 'OPEN').length})
+                                        Đang mở KS ({filteredClassMetrics.filter((m: any) => m.classInfo.status === 'OPEN' || m.classInfo.status === 'OPEN_SURVEY').length})
                                     </button>
                                     <button
                                         type="button"
@@ -532,11 +532,11 @@ export const AdminView: React.FC<AdminViewProps> = ({
                                                         <span className="text-[11px] font-bold px-2 py-0.5 rounded bg-itc-50 text-itc-800 border border-itc-200">{cm.classInfo.room}</span>
                                                         <span className="text-[11px] font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-700">Niên khóa: {academicYear}</span>
                                                         <span className={`text-[10px] font-black px-2 py-0.5 rounded-full border ${
-                                                            cm.classInfo.status === 'OPEN' 
+                                                            (cm.classInfo.status === 'OPEN' || cm.classInfo.status === 'OPEN_SURVEY') 
                                                                 ? 'bg-emerald-50 text-emerald-700 border-emerald-300' 
                                                                 : 'bg-slate-100 text-slate-600 border-slate-300'
                                                         }`}>
-                                                            {cm.classInfo.status === 'OPEN' ? 'ĐANG MỞ KHẢO SÁT' : 'ĐÃ ĐÓNG'}
+                                                            {(cm.classInfo.status === 'OPEN' || cm.classInfo.status === 'OPEN_SURVEY') ? 'ĐANG MỞ KHẢO SÁT' : 'ĐÃ ĐÓNG'}
                                                         </span>
                                                     </div>
                                                     

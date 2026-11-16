@@ -224,26 +224,55 @@ export default function App() {
     }, [reviews, classes, courses, teachers, warningThreshold, criteriaList]);
 
     const handleUpdateTeacherNote = async (reviewId: string, note: string) => {
-        const { error } = await supabase.from('reviews').update({ teacher_note: note }).eq('id', reviewId);
-        if (!error) {
-            fetchData();
-            triggerToast('Đã lưu ghi chú thành công!');
+        const oldNote = reviews.find(r => r.id === reviewId)?.teacherNote;
+        // 1. Optimistic Update tức thì 0ms
+        setReviews(prev => prev.map(r => r.id === reviewId ? { ...r, teacherNote: note } : r));
+        triggerToast('Đã lưu ghi chú thành công!');
+
+        // 2. Chạy ngầm lưu Database
+        try {
+            const { error } = await supabase.from('reviews').update({ teacher_note: note }).eq('id', reviewId);
+            if (error) {
+                setReviews(prev => prev.map(r => r.id === reviewId ? { ...r, teacherNote: oldNote } : r));
+                triggerToast('Lỗi lưu ghi chú!');
+            }
+        } catch {
+            setReviews(prev => prev.map(r => r.id === reviewId ? { ...r, teacherNote: oldNote } : r));
         }
     };
 
     const handleEscalateReview = async (reviewId: string) => {
-        const { error } = await supabase.from('reviews').update({ is_escalated: true }).eq('id', reviewId);
-        if (!error) {
-            fetchData();
-            triggerToast('Đã báo cáo Admin khẩn cấp!');
+        // 1. Optimistic Update tức thì 0ms
+        setReviews(prev => prev.map(r => r.id === reviewId ? { ...r, isEscalated: true } : r));
+        triggerToast('Đã báo cáo Admin khẩn cấp!');
+
+        // 2. Chạy ngầm lưu Database
+        try {
+            const { error } = await supabase.from('reviews').update({ is_escalated: true }).eq('id', reviewId);
+            if (error) {
+                setReviews(prev => prev.map(r => r.id === reviewId ? { ...r, isEscalated: false } : r));
+                triggerToast('Lỗi gửi báo cáo!');
+            }
+        } catch {
+            setReviews(prev => prev.map(r => r.id === reviewId ? { ...r, isEscalated: false } : r));
         }
     };
 
     const handleUpdateAction = async (reviewId: string, newStatus: string, newNote: string) => {
-        const { error } = await supabase.from('reviews').update({ status: newStatus, action_note: newNote }).eq('id', reviewId);
-        if (!error) {
-            fetchData();
-            triggerToast('Đã cập nhật tiến độ khắc phục!');
+        const oldReview = reviews.find(r => r.id === reviewId);
+        // 1. Optimistic Update tức thì 0ms
+        setReviews(prev => prev.map(r => r.id === reviewId ? { ...r, status: newStatus, actionNote: newNote } : r));
+        triggerToast('Đã cập nhật tiến độ khắc phục!');
+
+        // 2. Chạy ngầm lưu Database
+        try {
+            const { error } = await supabase.from('reviews').update({ status: newStatus, action_note: newNote }).eq('id', reviewId);
+            if (error && oldReview) {
+                setReviews(prev => prev.map(r => r.id === reviewId ? oldReview : r));
+                triggerToast('Lỗi lưu tiến độ!');
+            }
+        } catch {
+            if (oldReview) setReviews(prev => prev.map(r => r.id === reviewId ? oldReview : r));
         }
     };
 
@@ -259,6 +288,25 @@ export default function App() {
             }
         }, newClass.teacherId, newClass.code);
 
+        const formattedClass = {
+            id: newClass.id,
+            code: newClass.code,
+            courseId: newClass.courseId,
+            teacherId: newClass.teacherId,
+            teacherIds: newClass.teacherIds || (newClass.teacherId ? [newClass.teacherId] : []),
+            academicYear: newClass.academicYear || '2026',
+            schedule: newClass.schedule,
+            room: newClass.room,
+            studentsCount: newClass.studentsCount,
+            status: newClass.status || 'OPEN_SURVEY',
+            surveyConfig: newClass.surveyConfig
+        };
+
+        // 1. Optimistic Update tức thì 0ms
+        setClasses(prev => [formattedClass, ...prev]);
+        triggerToast('Tạo lớp thành công!');
+
+        // 2. Chạy ngầm lưu Database
         const { error } = await supabase.from('classes').insert([{
             id: newClass.id,
             code: newClass.code,
@@ -267,27 +315,16 @@ export default function App() {
             schedule: newClass.schedule,
             room: newClass.room,
             students_count: newClass.studentsCount,
-            status: newClass.status
+            status: newClass.status || 'OPEN_SURVEY'
         }]);
-        if (!error) {
-            fetchData();
-            triggerToast('Tạo lớp thành công!');
-        } else {
+        if (error) {
             console.error('Lỗi khi tạo lớp:', error);
+            setClasses(prev => prev.filter(c => c.id !== newClass.id));
             triggerToast('Lỗi: Không thể lưu vào Database!');
         }
     };
 
     const handleUpdateClass = async (classId: string, updatedClass: any) => {
-        const { error } = await supabase.from('classes').update({
-            code: updatedClass.code,
-            course_id: updatedClass.courseId,
-            teacher_id: updatedClass.teacherId,
-            room: updatedClass.room,
-            schedule: updatedClass.schedule,
-            students_count: updatedClass.studentsCount
-        }).eq('id', classId);
-
         // Lưu metadata bổ sung (niên khóa, giảng viên kèm theo)
         const meta = getClassMeta(classId, updatedClass.teacherId, updatedClass.code);
         saveClassMeta(classId, {
@@ -295,6 +332,21 @@ export default function App() {
             academicYear: updatedClass.academicYear || meta.academicYear,
             teacherIds: updatedClass.teacherIds || meta.teacherIds
         });
+
+        // 1. Optimistic Update tức thì 0ms
+        setClasses(prev => prev.map(c => c.id === classId ? {
+            ...c,
+            code: updatedClass.code,
+            courseId: updatedClass.courseId,
+            teacherId: updatedClass.teacherId,
+            teacherIds: updatedClass.teacherIds || (updatedClass.teacherId ? [updatedClass.teacherId] : []),
+            room: updatedClass.room,
+            schedule: updatedClass.schedule,
+            studentsCount: updatedClass.studentsCount,
+            academicYear: updatedClass.academicYear || c.academicYear
+        } : c));
+
+        triggerToast('Cập nhật thông tin lớp học thành công!');
 
         addAuditLog({
             actor: 'Ban Quản Trị ITC (admin@dlu.edu.vn)',
@@ -305,16 +357,36 @@ export default function App() {
             details: `Cập nhật phòng ${updatedClass.room}, lịch học ${updatedClass.schedule}`
         });
 
-        fetchData();
-        triggerToast('Cập nhật thông tin lớp học thành công!');
+        // 2. Chạy ngầm lưu Database
+        await supabase.from('classes').update({
+            code: updatedClass.code,
+            course_id: updatedClass.courseId,
+            teacher_id: updatedClass.teacherId,
+            room: updatedClass.room,
+            schedule: updatedClass.schedule,
+            students_count: updatedClass.studentsCount
+        }).eq('id', classId);
     };
 
     const handleToggleClassStatus = async (classId: string, currentStatus: string) => {
         const isOpen = currentStatus === 'OPEN_SURVEY' || currentStatus === 'OPEN';
         const newStatus = isOpen ? 'CLOSED_SURVEY' : 'OPEN_SURVEY';
-        const { error } = await supabase.from('classes').update({ status: newStatus }).eq('id', classId);
-        if (!error) {
-            const cls = classes.find(c => c.id === classId);
+        const cls = classes.find(c => c.id === classId);
+
+        // 1. OPTIMISTIC UPDATE: Chuyển đổi trạng thái ngay lập tức 0ms, không độ trễ
+        setClasses(prev => prev.map(c => c.id === classId ? { ...c, status: newStatus } : c));
+        triggerToast(isOpen ? 'Đã đóng đợt khảo sát cho lớp!' : 'Đã mở đợt khảo sát cho lớp!');
+
+        // 2. Chạy ngầm lưu Database và Audit Log
+        try {
+            const { error } = await supabase.from('classes').update({ status: newStatus }).eq('id', classId);
+            if (error) {
+                // Rollback nếu có lỗi mạng
+                setClasses(prev => prev.map(c => c.id === classId ? { ...c, status: currentStatus } : c));
+                triggerToast('Lỗi cập nhật trạng thái lớp! Đã hoàn tác.');
+                return;
+            }
+
             addAuditLog({
                 actor: 'Ban Quản Trị ITC (admin@dlu.edu.vn)',
                 role: 'ADMIN',
@@ -323,30 +395,43 @@ export default function App() {
                 target: `Lớp ${cls ? cls.code : classId}`,
                 details: isOpen ? 'Đã đóng khảo sát lớp học. Sinh viên không thể làm bài khảo sát nữa.' : 'Đã mở đợt khảo sát lớp học cho sinh viên.'
             });
-
-            fetchData();
-            triggerToast(isOpen ? 'Đã đóng đợt khảo sát cho lớp!' : 'Đã mở đợt khảo sát cho lớp!');
+        } catch {
+            setClasses(prev => prev.map(c => c.id === classId ? { ...c, status: currentStatus } : c));
+            triggerToast('Lỗi kết nối máy chủ!');
         }
     };
 
     const handleDeleteClass = async (classId: string) => {
-        // Xóa reviews trước (ràng buộc khóa ngoại)
-        const { error: revError } = await supabase.from('reviews').delete().eq('class_id', classId);
-        if (revError) {
-            console.error('Lỗi khi xóa dữ liệu:', revError);
-            triggerToast('Lỗi: Không thể xóa dữ liệu khảo sát!');
-            return;
-        }
+        const prevClasses = [...classes];
+        const prevReviews = [...reviews];
 
-        // Sau đó xóa lớp
-        const { error: clsError } = await supabase.from('classes').delete().eq('id', classId);
-        if (!clsError) {
-            setClasses(prev => prev.filter(c => c.id !== classId));
-            setReviews(prev => prev.filter(r => r.classId !== classId));
-            triggerToast('Đã xóa đợt khảo sát (lớp học) thành công!');
-        } else {
-            console.error('Lỗi khi xóa lớp:', clsError);
-            triggerToast('Lỗi: Không thể xóa đợt khảo sát!');
+        // 1. Optimistic Update tức thì 0ms
+        setClasses(prev => prev.filter(c => c.id !== classId));
+        setReviews(prev => prev.filter(r => r.classId !== classId));
+        triggerToast('Đã xóa đợt khảo sát (lớp học) thành công!');
+
+        // 2. Chạy ngầm xóa Database
+        try {
+            const { error: revError } = await supabase.from('reviews').delete().eq('class_id', classId);
+            if (revError) {
+                console.error('Lỗi khi xóa dữ liệu:', revError);
+                setClasses(prevClasses);
+                setReviews(prevReviews);
+                triggerToast('Lỗi: Không thể xóa dữ liệu khảo sát!');
+                return;
+            }
+
+            const { error: clsError } = await supabase.from('classes').delete().eq('id', classId);
+            if (clsError) {
+                console.error('Lỗi khi xóa lớp:', clsError);
+                setClasses(prevClasses);
+                setReviews(prevReviews);
+                triggerToast('Lỗi: Không thể xóa đợt khảo sát!');
+            }
+        } catch {
+            setClasses(prevClasses);
+            setReviews(prevReviews);
+            triggerToast('Lỗi kết nối máy chủ!');
         }
     };
 
