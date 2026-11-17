@@ -26,13 +26,13 @@ export const ReportModal = ({
 
     // BỘ LỌC ĐA CHIỀU & TÌM KIẾM NHANH
     const [searchKeyword, setSearchKeyword] = useState<string>('');
+    const [selectedCourseId, setSelectedCourseId] = useState<string>('ALL');
     const [selectedClassId, setSelectedClassId] = useState<string>('ALL');
     const [selectedTeacherId, setSelectedTeacherId] = useState<string>('ALL');
     const [selectedRatingFilter, setSelectedRatingFilter] = useState<string>('ALL'); // ALL, ALERT, 1, 2, 3, 4, 5
     const [selectedSemester, setSelectedSemester] = useState<string>('ALL');
     const [startDate, setStartDate] = useState<string>(''); // YYYY-MM-DD
     const [endDate, setEndDate] = useState<string>(''); // YYYY-MM-DD
-    const [reportViewMode, setReportViewMode] = useState<'REVIEWS' | 'ALERTS'>('REVIEWS'); // Mặc định hiển thị Bảng đánh giá chi tiết chuẩn học đường
 
     // PHÂN TRANG (PAGINATION)
     const [currentPage, setCurrentPage] = useState<number>(1);
@@ -41,7 +41,34 @@ export const ReportModal = ({
     // Tự động quay về trang 1 khi người dùng đổi tiêu chí lọc hoặc tìm kiếm
     useEffect(() => {
         setCurrentPage(1);
-    }, [selectedClassId, selectedTeacherId, selectedRatingFilter, selectedSemester, startDate, endDate, reportViewMode, searchKeyword]);
+    }, [selectedCourseId, selectedClassId, selectedTeacherId, selectedRatingFilter, selectedSemester, startDate, endDate, searchKeyword]);
+
+    // Xử lý liên kết 2 chiều thông minh giữa Môn học và Lớp học
+    const handleCourseChange = (courseId: string) => {
+        setSelectedCourseId(courseId);
+        if (courseId !== 'ALL' && selectedClassId !== 'ALL') {
+            const currentClass = classes.find(c => c.id === selectedClassId);
+            if (currentClass && currentClass.courseId !== courseId) {
+                setSelectedClassId('ALL');
+            }
+        }
+    };
+
+    const handleClassChange = (classId: string) => {
+        setSelectedClassId(classId);
+        if (classId !== 'ALL') {
+            const cls = classes.find(c => c.id === classId);
+            if (cls && cls.courseId) {
+                setSelectedCourseId(cls.courseId);
+            }
+        }
+    };
+
+    // Danh sách lớp học lọc theo môn học đã chọn
+    const availableClasses = useMemo(() => {
+        if (selectedCourseId === 'ALL') return classes;
+        return classes.filter(c => c.courseId === selectedCourseId);
+    }, [classes, selectedCourseId]);
 
     // Lấy danh sách Học kỳ / Niên khóa duy nhất
     const semesterOptions = useMemo(() => {
@@ -112,6 +139,7 @@ export const ReportModal = ({
                 ...r,
                 classCode: cls?.code || 'Chưa rõ',
                 className: cls?.code || 'Chưa rõ',
+                courseId: cls?.courseId,
                 room: cls?.room || 'Phòng học',
                 courseName: course?.name || 'Môn học',
                 academicYear: cls?.academicYear || '2025-2026 - HK1',
@@ -131,6 +159,9 @@ export const ReportModal = ({
                 const matchComment = (r.comment || '').toLowerCase().includes(kw);
                 if (!matchClass && !matchCourse && !matchTeacher && !matchRoom && !matchComment) return false;
             }
+
+            // Lọc theo Môn học
+            if (selectedCourseId !== 'ALL' && r.courseId !== selectedCourseId) return false;
 
             // Lọc theo Lớp
             if (selectedClassId !== 'ALL' && r.classId !== selectedClassId) return false;
@@ -159,61 +190,14 @@ export const ReportModal = ({
                 return r.avgScore < warningThreshold || r.isEscalated;
             } else if (selectedRatingFilter !== 'ALL') {
                 const targetStar = parseInt(selectedRatingFilter);
-                // Ví dụ lọc 1 sao: 1.0 đến 1.9; 2 sao: 2.0 đến 2.9...
                 return Math.floor(r.avgScore) === targetStar;
             }
 
             return true;
         });
-    }, [reviews, classes, courses, teachers, selectedClassId, selectedTeacherId, selectedRatingFilter, selectedSemester, startDate, endDate, warningThreshold, searchKeyword]);
+    }, [reviews, classes, courses, teachers, selectedCourseId, selectedClassId, selectedTeacherId, selectedRatingFilter, selectedSemester, startDate, endDate, warningThreshold, searchKeyword]);
 
-    // DỮ LIỆU ĐIỂM NÓNG BẢO TRÌ (ALERTS) ĐÃ LỌC
-    const filteredAlerts = useMemo(() => {
-        const rawAlerts = stats?.alertList || [];
-        return rawAlerts.filter((a: any) => {
-            const cls = classes.find(c => c.id === a.classId || c.code === a.classCode);
-            const assignedTeacherIds = cls?.teacherIds || (cls?.teacherId ? [cls.teacherId] : []);
-
-            // Lọc theo Từ khóa tìm kiếm
-            if (searchKeyword.trim()) {
-                const kw = searchKeyword.toLowerCase().trim();
-                const matchClass = (a.classCode || cls?.code || '').toLowerCase().includes(kw);
-                const matchCourse = (a.courseName || a.className || '').toLowerCase().includes(kw);
-                const matchTeacher = (a.teacherName || '').toLowerCase().includes(kw);
-                const matchRoom = (a.room || cls?.room || '').toLowerCase().includes(kw);
-                const matchDesc = (a.title || a.description || a.criteriaName || '').toLowerCase().includes(kw);
-                if (!matchClass && !matchCourse && !matchTeacher && !matchRoom && !matchDesc) return false;
-            }
-
-            if (selectedClassId !== 'ALL' && a.classId && a.classId !== selectedClassId) return false;
-            if (selectedTeacherId !== 'ALL' && !assignedTeacherIds.includes(selectedTeacherId)) return false;
-            if (selectedSemester !== 'ALL' && a.academicYear && a.academicYear !== selectedSemester) return false;
-
-            // Lọc theo thời gian nếu alert có mốc thời gian
-            if (startDate && (a.createdAt || a.created_at)) {
-                const alertTime = new Date(a.createdAt || a.created_at).getTime();
-                const startObj = new Date(startDate + 'T00:00:00');
-                if (!isNaN(alertTime) && alertTime < startObj.getTime()) return false;
-            }
-            if (endDate && (a.createdAt || a.created_at)) {
-                const alertTime = new Date(a.createdAt || a.created_at).getTime();
-                const endObj = new Date(endDate + 'T23:59:59.999');
-                if (!isNaN(alertTime) && alertTime > endObj.getTime()) return false;
-            }
-
-            const score = parseFloat(a.score) || 0;
-            if (selectedRatingFilter === 'ALERT') {
-                return score < warningThreshold;
-            } else if (selectedRatingFilter !== 'ALL') {
-                const targetStar = parseInt(selectedRatingFilter);
-                return Math.floor(score) === targetStar;
-            }
-
-            return true;
-        });
-    }, [stats?.alertList, classes, selectedClassId, selectedTeacherId, selectedRatingFilter, selectedSemester, startDate, endDate, warningThreshold, searchKeyword]);
-
-    // PHÂN TRANG DANH SÁCH KHẢO SÁT & SỰ CỐ
+    // PHÂN TRANG DANH SÁCH KHẢO SÁT HỌC VIÊN
     const totalReviewItems = filteredReviews.length;
     const totalReviewPages = pageSize === 0 ? 1 : Math.max(1, Math.ceil(totalReviewItems / pageSize));
     const paginatedReviews = useMemo(() => {
@@ -222,14 +206,6 @@ export const ReportModal = ({
         return filteredReviews.slice(from, from + pageSize);
     }, [filteredReviews, currentPage, pageSize]);
 
-    const totalAlertItems = filteredAlerts.length;
-    const totalAlertPages = pageSize === 0 ? 1 : Math.max(1, Math.ceil(totalAlertItems / pageSize));
-    const paginatedAlerts = useMemo(() => {
-        if (pageSize === 0) return filteredAlerts;
-        const from = (currentPage - 1) * pageSize;
-        return filteredAlerts.slice(from, from + pageSize);
-    }, [filteredAlerts, currentPage, pageSize]);
-
     // TÍNH TOÁN KPI ĐỘNG THEO BỘ LỌC ĐANG CHỌN
     const activeStats = useMemo(() => {
         const count = filteredReviews.length;
@@ -237,27 +213,34 @@ export const ReportModal = ({
             return {
                 submissions: 0,
                 avg: '0.0',
-                alertsCount: filteredAlerts.length
+                alertsCount: 0
             };
         }
         const sum = filteredReviews.reduce((acc, r) => acc + r.avgScore, 0);
+        const lowScoreCount = filteredReviews.filter(r => r.avgScore < warningThreshold || r.isEscalated).length;
         return {
             submissions: count,
             avg: (sum / count).toFixed(1),
-            alertsCount: filteredAlerts.length
+            alertsCount: lowScoreCount
         };
-    }, [filteredReviews, filteredAlerts]);
+    }, [filteredReviews, warningThreshold]);
 
 
 
     // TÊN TIÊU ĐỀ BỘ LỌC HIỆN TẠI (ĐỂ XUẤT FILE VÀ IN)
     const filterTitleText = useMemo(() => {
         const parts: string[] = [];
+
+        if (selectedCourseId !== 'ALL') {
+            const crs = courses.find(cr => cr.id === selectedCourseId);
+            parts.push(`Môn học: ${crs ? crs.name : selectedCourseId}`);
+        }
+
         if (selectedClassId !== 'ALL') {
             const c = classes.find(cl => cl.id === selectedClassId);
             parts.push(`Lớp: ${c ? c.code : selectedClassId}`);
         } else {
-            parts.push('Tất cả các lớp');
+            parts.push(selectedCourseId !== 'ALL' ? 'Tất cả lớp thuộc môn' : 'Tất cả các lớp');
         }
 
         if (selectedTeacherId !== 'ALL') {
@@ -295,7 +278,7 @@ export const ReportModal = ({
         }
 
         return parts.join(' | ');
-    }, [selectedClassId, selectedTeacherId, selectedSemester, selectedRatingFilter, startDate, endDate, classes, teachers, warningThreshold]);
+    }, [selectedCourseId, selectedClassId, selectedTeacherId, selectedSemester, selectedRatingFilter, startDate, endDate, courses, classes, teachers, warningThreshold]);
 
     // 1. XUẤT FILE EXCEL / CSV THEO ĐÚNG BỘ LỌC ĐÃ CHỌN
     const handleExportCSV = () => {
@@ -310,25 +293,13 @@ export const ReportModal = ({
             csv += `Thời gian xuất báo cáo:,"${new Date().toLocaleString('vi-VN')}"\n`;
             csv += `Tổng số phiếu khảo sát lọc được:,"${activeStats.submissions} lượt"\n`;
             csv += `Điểm hài lòng trung bình bộ lọc:,"${activeStats.avg} / 5.0"\n`;
-            csv += `Số lượng cảnh báo sự cố:,"${activeStats.alertsCount} hạng mục"\n\n`;
+            csv += `Số lượng đánh giá cần lưu ý:,"${activeStats.alertsCount} lượt (< ${warningThreshold} sao)"\n\n`;
 
-            if (reportViewMode === 'REVIEWS') {
-                csv += "STT,Thời Gian Đánh Giá,Mã Lớp,Khóa Học / Môn Học,Phòng Học,Giảng Viên Phụ Trách,Học Kỳ / Niên Khóa,Điểm Trung Bình (Sao),Trạng Thái Xử Lý,Nhận Xét & Ý Kiến Học Viên\n";
-                filteredReviews.forEach((r, idx) => {
-                    const comment = (r.comment || '').replace(/"/g, '""');
-                    csv += `${idx + 1},"${r.formattedTime}","${r.classCode}","${r.courseName}","${r.room}","${r.teacherName}","${r.academicYear}",${r.avgScore},"${r.status || 'OPEN'}","${comment}"\n`;
-                });
-            } else {
-                csv += "STT,Mã Lớp,Phòng Học,Giảng Viên Phụ Trách,Học Kỳ / Niên Khóa,Tiêu Chí Phàn Nàn,Nội Dung Chi Tiết,Điểm Đánh Giá,Mức Độ Cảnh Báo,Ý Kiến Phản Hồi Học Viên\n";
-                filteredAlerts.forEach((a: any, idx: number) => {
-                    const score = parseFloat(a.score) || 0;
-                    const level = score <= 2.0 ? "Khẩn cấp" : "Cần lưu ý";
-                    const comments = (a.studentComments && a.studentComments.length > 0)
-                        ? a.studentComments.map((c: any) => c.comment.replace(/"/g, '""')).join('; ')
-                        : 'Không có ghi chú thêm';
-                    csv += `${idx + 1},"${a.classCode || ''}","${a.room || ''}","${a.teacherName || ''}","${a.academicYear || ''}","${(a.critName || '').replace(/"/g, '""')}","${(a.fullQuestion || a.critName || '').replace(/"/g, '""')}",${a.score},"${level}","${comments}"\n`;
-                });
-            }
+            csv += "STT,Thời Gian Đánh Giá,Mã Lớp,Khóa Học / Môn Học,Phòng Học,Giảng Viên Phụ Trách,Học Kỳ / Niên Khóa,Điểm Trung Bình (Sao),Trạng Thái Xử Lý,Nhận Xét & Ý Kiến Học Viên\n";
+            filteredReviews.forEach((r, idx) => {
+                const comment = (r.comment || '').replace(/"/g, '""');
+                csv += `${idx + 1},"${r.formattedTime}","${r.classCode}","${r.courseName}","${r.room}","${r.teacherName}","${r.academicYear}",${r.avgScore},"${r.status || 'OPEN'}","${comment}"\n`;
+            });
 
             const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
             const url = URL.createObjectURL(blob);
@@ -359,92 +330,42 @@ export const ReportModal = ({
         const dateStr = new Date().toLocaleDateString('vi-VN');
         const timeStr = new Date().toLocaleTimeString('vi-VN');
 
-        let tableHeaderHtml = '';
-        let tableRowsHtml = '';
+        const tableHeaderHtml = `
+            <tr>
+                <th style="width: 30px; text-align: center;">STT</th>
+                <th style="width: 100px;">Thời Gian Đánh Giá</th>
+                <th style="width: 70px;">Mã Lớp</th>
+                <th style="width: 130px;">Môn Học / Khóa Học</th>
+                <th style="width: 120px;">Giảng Viên Phụ Trách</th>
+                <th style="width: 55px; text-align: center;">Điểm</th>
+                <th style="width: 75px; text-align: center;">Trạng Thái</th>
+                <th>Ý Kiến / Phản Hồi Học Viên</th>
+            </tr>
+        `;
 
-        if (reportViewMode === 'REVIEWS') {
-            tableHeaderHtml = `
-                <tr>
-                    <th style="width: 30px; text-align: center;">STT</th>
-                    <th style="width: 100px;">Thời Gian Đánh Giá</th>
-                    <th style="width: 70px;">Mã Lớp</th>
-                    <th style="width: 120px;">Môn Học / Khóa Học</th>
-                    <th style="width: 110px;">Giảng Viên Phụ Trách</th>
-                    <th style="width: 55px; text-align: center;">Điểm</th>
-                    <th style="width: 75px; text-align: center;">Trạng Thái</th>
-                    <th>Ý Kiến / Phản Hồi Học Viên</th>
+        const tableRowsHtml = filteredReviews.map((r, idx) => {
+            const isLow = r.avgScore <= 2.5;
+            return `
+                <tr style="border-bottom: 1px solid #e2e8f0; font-size: 11px;">
+                    <td style="padding: 8px; text-align: center; font-weight: bold;">${idx + 1}</td>
+                    <td style="padding: 8px; color: #64748b; font-size: 10.5px;">${r.formattedTime}</td>
+                    <td style="padding: 8px; font-weight: bold; color: #1e3a8a;">${r.classCode}</td>
+                    <td style="padding: 8px;">${r.courseName}</td>
+                    <td style="padding: 8px; font-weight: 500;">${r.teacherName}</td>
+                    <td style="padding: 8px; text-align: center; font-weight: bold; font-size: 13px; color: ${isLow ? '#dc2626' : '#059669'};">
+                        ${r.avgScore} / 5.0
+                    </td>
+                    <td style="padding: 8px; text-align: center;">
+                        <span style="display:inline-block; padding: 2px 8px; border-radius: 9999px; font-weight: bold; font-size: 10px; background-color: #f1f5f9; color: #334155;">
+                            ${r.status || 'OPEN'}
+                        </span>
+                    </td>
+                    <td style="padding: 8px; font-size: 11px; color: #1e293b;">
+                        ${r.comment || '<span style="color:#94a3b8;font-style:italic;">(Học viên không để lại lời bình)</span>'}
+                    </td>
                 </tr>
             `;
-
-            tableRowsHtml = filteredReviews.map((r, idx) => {
-                const isLow = r.avgScore <= 2.5;
-                return `
-                    <tr style="border-bottom: 1px solid #e2e8f0; font-size: 11px;">
-                        <td style="padding: 8px; text-align: center; font-weight: bold;">${idx + 1}</td>
-                        <td style="padding: 8px; color: #64748b; font-size: 10.5px;">${r.formattedTime}</td>
-                        <td style="padding: 8px; font-weight: bold; color: #1e3a8a;">${r.classCode}</td>
-                        <td style="padding: 8px;">${r.courseName}</td>
-                        <td style="padding: 8px; font-weight: 500;">${r.teacherName}</td>
-                        <td style="padding: 8px; text-align: center; font-weight: bold; font-size: 13px; color: ${isLow ? '#dc2626' : '#059669'};">
-                            ${r.avgScore} / 5.0
-                        </td>
-                        <td style="padding: 8px; text-align: center;">
-                            <span style="display:inline-block; padding: 2px 8px; border-radius: 9999px; font-weight: bold; font-size: 10px; background-color: #f1f5f9; color: #334155;">
-                                ${r.status || 'OPEN'}
-                            </span>
-                        </td>
-                        <td style="padding: 8px; font-size: 11px; color: #1e293b;">
-                            ${r.comment || '<span style="color:#94a3b8;font-style:italic;">(Học viên không để lại lời bình)</span>'}
-                        </td>
-                    </tr>
-                `;
-            }).join('');
-        } else {
-            tableHeaderHtml = `
-                <tr>
-                    <th style="width: 30px; text-align: center;">STT</th>
-                    <th style="width: 70px;">Mã Lớp</th>
-                    <th style="width: 75px;">Phòng</th>
-                    <th style="width: 110px;">Giảng Viên</th>
-                    <th>Tiêu Chí Phàn Nàn</th>
-                    <th style="width: 55px; text-align: center;">Điểm</th>
-                    <th style="width: 75px; text-align: center;">Mức Độ</th>
-                    <th style="width: 200px;">Ý Kiến Phản Hồi Học Viên</th>
-                </tr>
-            `;
-
-            tableRowsHtml = filteredAlerts.map((a: any, idx: number) => {
-                const score = parseFloat(a.score) || 0;
-                const isCritical = score <= 2.0;
-                const comment = (a.studentComments && a.studentComments.length > 0)
-                    ? a.studentComments.map((c: any) => `<li>${c.comment}</li>`).join('')
-                    : '<span style="color:#94a3b8;font-style:italic;">(Không có lời bình)</span>';
-
-                return `
-                    <tr style="border-bottom: 1px solid #e2e8f0; font-size: 11px;">
-                        <td style="padding: 8px; text-align: center; font-weight: bold;">${idx + 1}</td>
-                        <td style="padding: 8px; font-weight: bold; color: #1e3a8a;">${a.classCode}</td>
-                        <td style="padding: 8px;">${a.room || 'Phòng học'}</td>
-                        <td style="padding: 8px; font-weight: 500;">${a.teacherName || '-'}</td>
-                        <td style="padding: 8px;">
-                            <b>${a.critName}</b>
-                            ${a.fullQuestion ? `<div style="font-size: 10px; color: #64748b; margin-top: 2px;">${a.fullQuestion}</div>` : ''}
-                        </td>
-                        <td style="padding: 8px; text-align: center; font-weight: bold; font-size: 13px; color: ${isCritical ? '#dc2626' : '#d97706'};">
-                            ${a.score} / 5.0
-                        </td>
-                        <td style="padding: 8px; text-align: center;">
-                            <span style="display:inline-block; padding: 2px 8px; border-radius: 9999px; font-weight: bold; font-size: 10px; background-color: ${isCritical ? '#fee2e2' : '#fef3c7'}; color: ${isCritical ? '#991b1b' : '#92400e'}; border: 1px solid ${isCritical ? '#fecaca' : '#fde68a'};">
-                                ${isCritical ? 'Khẩn cấp' : 'Cần lưu ý'}
-                            </span>
-                        </td>
-                        <td style="padding: 8px; font-size: 10.5px; color: #334155;">
-                            <ul style="margin: 0; padding-left: 14px;">${comment}</ul>
-                        </td>
-                    </tr>
-                `;
-            }).join('');
-        }
+        }).join('');
 
         const htmlContent = `
             <!DOCTYPE html>
@@ -718,16 +639,15 @@ export const ReportModal = ({
                 {/* THANH BỘ LỌC ĐA TIÊU CHÍ, TÌM KIẾM THEO LỚP/GIẢNG VIÊN & KHOẢNG THỜI GIAN */}
                 <div className="bg-slate-50 border-b border-slate-200 px-6 py-3.5 shrink-0 space-y-3">
                     
-                    {/* HÀNG 1: Ô TÌM KIẾM NHANH (SEARCH BAR) + CHUYỂN ĐỔI CHẾ ĐỘ XEM */}
-                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pb-2.5 border-b border-slate-200/80">
-                        {/* Ô TÌM KIẾM THEO LỚP, GIẢNG VIÊN, MÔN HỌC, PHÒNG LAB */}
-                        <div className="relative flex-1">
+                    {/* HÀNG 1: Ô TÌM KIẾM NHANH (SEARCH BAR) TOÀN DIỆN */}
+                    <div className="pb-2.5 border-b border-slate-200/80">
+                        <div className="relative w-full">
                             <Icons.Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
                             <input
                                 type="text"
                                 value={searchKeyword}
                                 onChange={e => setSearchKeyword(e.target.value)}
-                                placeholder="Tìm kiếm nhanh theo mã lớp (VD: 2027), tên giảng viên, môn học, phòng lab..."
+                                placeholder="Tìm kiếm nhanh theo mã lớp (VD: 2027), tên môn học, giảng viên, phòng lab, ý kiến học viên..."
                                 className="w-full bg-white border border-slate-200 rounded-xl pl-9 pr-9 py-2 text-xs font-semibold text-slate-800 placeholder-slate-400 focus:outline-none focus:border-itc-500 shadow-2xs"
                             />
                             {searchKeyword && (
@@ -741,52 +661,52 @@ export const ReportModal = ({
                                 </button>
                             )}
                         </div>
-
-                        {/* Chế độ xem: Phiếu khảo sát vs Điểm nóng bảo trì chuẩn học đường */}
-                        <div className="flex bg-slate-200/80 p-0.5 rounded-xl shrink-0">
-                            <button
-                                type="button"
-                                onClick={() => setReportViewMode('REVIEWS')}
-                                className={`flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold rounded-lg transition-all ${
-                                    reportViewMode === 'REVIEWS' ? 'bg-white text-itc-900 shadow-xs font-black' : 'text-slate-600 hover:text-slate-900'
-                                }`}
-                                title="Xem danh sách phiếu khảo sát chi tiết của học viên"
-                            >
-                                <Icons.FileText className="w-3.5 h-3.5 text-itc-800" />
-                                <span>Phiếu Khảo Sát ({filteredReviews.length})</span>
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => setReportViewMode('ALERTS')}
-                                className={`flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold rounded-lg transition-all ${
-                                    reportViewMode === 'ALERTS' ? 'bg-white text-rose-700 shadow-xs font-black' : 'text-slate-600 hover:text-slate-900'
-                                }`}
-                                title="Xem danh sách các điểm nóng và sự cố cần bảo trì phòng máy"
-                            >
-                                <Icons.AlertTriangle className="w-3.5 h-3.5 text-rose-600" />
-                                <span>Điểm Nóng & Bảo Trì ({filteredAlerts.length})</span>
-                            </button>
-                        </div>
                     </div>
 
-                    {/* HÀNG 2: 4 DROPDOWN LỌC CHUYÊN SÂU */}
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 items-center">
-                        {/* 1. Lọc theo Lớp */}
+                    {/* HÀNG 2: 5 DROPDOWN LỌC CHUYÊN SÂU */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2.5 items-center">
+                        {/* 1. Lọc theo Môn học */}
                         <div>
-                            <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Lọc theo Lớp học:</label>
+                            <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Lọc theo Môn học:</label>
                             <select
-                                value={selectedClassId}
-                                onChange={e => setSelectedClassId(e.target.value)}
+                                value={selectedCourseId}
+                                onChange={e => handleCourseChange(e.target.value)}
                                 className="w-full bg-white border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs font-bold text-slate-800 focus:border-itc-500 outline-none"
                             >
-                                <option value="ALL">Tất cả các lớp ({classes.length})</option>
-                                {classes.map(c => (
-                                    <option key={c.id} value={c.id}>Lớp {c.code}</option>
+                                <option value="ALL">Tất cả môn học ({courses.length})</option>
+                                {courses.map(crs => (
+                                    <option key={crs.id} value={crs.id}>
+                                        {crs.name} ({crs.code || 'MH'})
+                                    </option>
                                 ))}
                             </select>
                         </div>
 
-                        {/* 2. Lọc theo Giảng viên */}
+                        {/* 2. Lọc theo Lớp học (Liên kết với Môn học) */}
+                        <div>
+                            <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Lọc theo Lớp học:</label>
+                            <select
+                                value={selectedClassId}
+                                onChange={e => handleClassChange(e.target.value)}
+                                className="w-full bg-white border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs font-bold text-slate-800 focus:border-itc-500 outline-none"
+                            >
+                                <option value="ALL">
+                                    {selectedCourseId === 'ALL'
+                                        ? `Tất cả các lớp (${classes.length})`
+                                        : `Tất cả lớp thuộc môn (${availableClasses.length})`}
+                                </option>
+                                {availableClasses.map(c => {
+                                    const crs = courses.find(cr => cr.id === c.courseId);
+                                    return (
+                                        <option key={c.id} value={c.id}>
+                                            Lớp {c.code} {crs ? `- ${crs.name}` : ''}
+                                        </option>
+                                    );
+                                })}
+                            </select>
+                        </div>
+
+                        {/* 3. Lọc theo Giảng viên */}
                         <div>
                             <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Lọc theo Giảng viên:</label>
                             <select
@@ -801,7 +721,7 @@ export const ReportModal = ({
                             </select>
                         </div>
 
-                        {/* 3. Lọc theo Mức sao (1-5 sao hoặc Điểm nóng) */}
+                        {/* 4. Lọc theo Mức sao (1-5 sao hoặc Điểm nóng) */}
                         <div>
                             <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Đánh giá số sao:</label>
                             <select
@@ -819,7 +739,7 @@ export const ReportModal = ({
                             </select>
                         </div>
 
-                        {/* 4. Lọc theo Học kỳ & Niên khóa */}
+                        {/* 5. Lọc theo Học kỳ & Niên khóa */}
                         <div>
                             <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Học kỳ / Niên khóa:</label>
                             <select
@@ -878,17 +798,18 @@ export const ReportModal = ({
                         </div>
 
                         {/* Tổng số kết quả phù hợp & Nút đặt lại */}
-                        <div className="text-[11px] font-semibold text-slate-500 flex items-center justify-between">
+                        <div className="text-[11px] font-semibold text-slate-500 flex items-center justify-between gap-3">
                             {searchKeyword ? (
-                                <span>Kết quả tìm kiếm: <b className="text-itc-800">"{searchKeyword}"</b> ({filteredReviews.length} phiếu, {filteredAlerts.length} sự cố)</span>
+                                <span>Kết quả tìm kiếm: <b className="text-itc-800">"{searchKeyword}"</b> ({filteredReviews.length} phiếu nộp)</span>
                             ) : (
-                                <span className="text-slate-500">Đang hiển thị dữ liệu theo bộ lọc hiện tại</span>
+                                <span className="text-slate-500">Đang hiển thị {filteredReviews.length} phiếu theo bộ lọc hiện tại</span>
                             )}
 
-                            {(selectedClassId !== 'ALL' || selectedTeacherId !== 'ALL' || selectedRatingFilter !== 'ALL' || selectedSemester !== 'ALL' || startDate || endDate || searchKeyword) && (
+                            {(selectedCourseId !== 'ALL' || selectedClassId !== 'ALL' || selectedTeacherId !== 'ALL' || selectedRatingFilter !== 'ALL' || selectedSemester !== 'ALL' || startDate || endDate || searchKeyword) && (
                                 <button
                                     type="button"
                                     onClick={() => {
+                                        setSelectedCourseId('ALL');
                                         setSelectedClassId('ALL');
                                         setSelectedTeacherId('ALL');
                                         setSelectedRatingFilter('ALL');
@@ -939,16 +860,16 @@ export const ReportModal = ({
                             </div>
                         </div>
 
-                        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs hover:border-rose-200 transition-colors">
+                        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs hover:border-amber-200 transition-colors">
                             <div className="flex items-center justify-between text-slate-500">
-                                <span className="text-[11px] font-bold uppercase tracking-wider">Cảnh báo sự cố / Bảo trì</span>
-                                <div className="w-7 h-7 rounded-lg bg-rose-50 border border-rose-100 flex items-center justify-center text-rose-600">
+                                <span className="text-[11px] font-bold uppercase tracking-wider">Đánh giá cần lưu ý</span>
+                                <div className="w-7 h-7 rounded-lg bg-amber-50 border border-amber-100 flex items-center justify-center text-amber-600">
                                     <Icons.AlertTriangle className="w-3.5 h-3.5" />
                                 </div>
                             </div>
                             <div className="flex items-baseline gap-1.5 mt-2">
-                                <b className="text-2xl font-black text-rose-600">{activeStats.alertsCount}</b>
-                                <span className="text-slate-400 text-xs font-semibold">hạng mục (&lt; {warningThreshold} sao)</span>
+                                <b className="text-2xl font-black text-amber-600">{activeStats.alertsCount}</b>
+                                <span className="text-slate-400 text-xs font-semibold">phiếu (&lt; {warningThreshold} sao)</span>
                             </div>
                         </div>
                     </div>
@@ -958,10 +879,7 @@ export const ReportModal = ({
                         <div className="px-4 py-3 bg-slate-50 border-b border-slate-200 flex flex-wrap justify-between items-center gap-2">
                             <div>
                                 <h4 className="font-bold text-slate-800 text-xs sm:text-sm">
-                                    {reportViewMode === 'REVIEWS' 
-                                        ? `Danh sách Phiếu khảo sát học viên (${filteredReviews.length} lượt)`
-                                        : `Danh sách Điểm nóng & Cảnh báo bảo trì (${filteredAlerts.length} hạng mục)`
-                                    }
+                                    Danh sách Phiếu khảo sát học viên ({filteredReviews.length} lượt)
                                 </h4>
                                 <p className="text-[11px] text-slate-500 mt-0.5">
                                     Đang lọc: <span className="font-semibold text-itc-900">{filterTitleText}</span>
@@ -969,165 +887,90 @@ export const ReportModal = ({
                             </div>
                         </div>
 
-                        {/* BẢNG CHẾ ĐỘ 1: XEM CHI TIẾT CÁC PHIẾU ĐÁNH GIÁ (KÈM NGÀY GIỜ, GIẢNG VIÊN, LỚP) */}
-                        {reportViewMode === 'REVIEWS' ? (
-                            filteredReviews.length > 0 ? (
-                                <div className="max-h-[380px] overflow-y-auto">
-                                    <table className="w-full text-left border-collapse">
-                                        <thead className="bg-slate-100/90 sticky top-0 z-10 text-slate-700 font-bold text-[11px] uppercase tracking-wider border-b border-slate-200">
-                                            <tr>
-                                                <th className="p-3 w-36">Thời gian đánh giá</th>
-                                                <th className="p-3 w-28">Mã Lớp</th>
-                                                <th className="p-3 w-40">Giảng viên</th>
-                                                <th className="p-3">Khóa học / Nhận xét học viên</th>
-                                                <th className="p-3 text-center w-24">Trạng thái</th>
-                                                <th className="p-3 text-right w-24">Điểm TB</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-slate-100 text-xs">
-                                            {paginatedReviews.map((r, idx) => {
-                                                const isLow = r.avgScore <= 2.5;
-                                                return (
-                                                    <tr key={r.id || idx} className="hover:bg-slate-50 transition-colors">
-                                                        <td className="p-3 text-slate-500 font-medium text-[11px]">
-                                                            <div className="flex items-center gap-1.5">
-                                                                <Icons.Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                                                                <span>{r.formattedTime}</span>
-                                                            </div>
-                                                        </td>
-                                                        <td className="p-3 font-bold text-itc-900">
-                                                            {r.classCode}
-                                                            <div className="text-[10px] text-slate-400 font-normal">{r.room}</div>
-                                                        </td>
-                                                        <td className="p-3 font-semibold text-slate-800">
-                                                            {r.teacherName}
-                                                        </td>
-                                                        <td className="p-3 text-slate-700">
-                                                            <div className="font-bold text-[11px] text-slate-900 mb-0.5">{r.courseName}</div>
-                                                            {r.comment ? (
-                                                                <p className="text-[11px] text-slate-600 bg-slate-50 p-1.5 rounded-lg border border-slate-100 italic">
-                                                                    "{r.comment}"
-                                                                </p>
-                                                            ) : (
-                                                                <span className="text-[10px] text-slate-400 italic">(Không để lại bình luận)</span>
-                                                            )}
-                                                        </td>
-                                                        <td className="p-3 text-center">
-                                                            <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                                                                r.status === 'RESOLVED' 
-                                                                    ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
-                                                                    : r.status === 'IN_PROGRESS'
-                                                                    ? 'bg-amber-100 text-amber-800 border border-amber-200'
-                                                                    : 'bg-slate-100 text-slate-700 border border-slate-200'
-                                                            }`}>
-                                                                {r.status === 'RESOLVED' ? 'Đã giải quyết' : r.status === 'IN_PROGRESS' ? 'Đang xử lý' : 'Mới tiếp nhận'}
-                                                            </span>
-                                                        </td>
-                                                        <td className="p-3 text-right font-black text-sm" style={{ color: isLow ? '#dc2626' : '#059669' }}>
-                                                            {r.avgScore} / 5.0
-                                                        </td>
-                                                    </tr>
-                                                );
-                                            })}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            ) : (
-                                <div className="p-8 text-center text-slate-400 italic">
-                                    <Icons.Search className="w-8 h-8 text-slate-300 mx-auto mb-2" />
-                                    <p className="font-semibold text-slate-600">Không có phiếu khảo sát nào khớp với bộ lọc đã chọn.</p>
-                                    <p className="text-[11px] text-slate-400 mt-1">Hãy thử đổi tiêu chí lớp, giảng viên hoặc mức sao ở thanh công cụ trên.</p>
-                                </div>
-                            )
+                        {filteredReviews.length > 0 ? (
+                            <div className="max-h-[380px] overflow-y-auto">
+                                <table className="w-full text-left border-collapse">
+                                    <thead className="bg-slate-100/90 sticky top-0 z-10 text-slate-700 font-bold text-[11px] uppercase tracking-wider border-b border-slate-200">
+                                        <tr>
+                                            <th className="p-3 w-36">Thời gian đánh giá</th>
+                                            <th className="p-3 w-28">Mã Lớp</th>
+                                            <th className="p-3 w-40">Giảng viên</th>
+                                            <th className="p-3">Khóa học / Nhận xét học viên</th>
+                                            <th className="p-3 text-center w-24">Trạng thái</th>
+                                            <th className="p-3 text-right w-24">Điểm TB</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100 text-xs">
+                                        {paginatedReviews.map((r, idx) => {
+                                            const isLow = r.avgScore <= 2.5;
+                                            return (
+                                                <tr key={r.id || idx} className="hover:bg-slate-50 transition-colors">
+                                                    <td className="p-3 text-slate-500 font-medium text-[11px]">
+                                                        <div className="flex items-center gap-1.5">
+                                                            <Icons.Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                                                            <span>{r.formattedTime}</span>
+                                                        </div>
+                                                    </td>
+                                                    <td className="p-3 font-bold text-itc-900">
+                                                        {r.classCode}
+                                                        <div className="text-[10px] text-slate-400 font-normal">{r.room}</div>
+                                                    </td>
+                                                    <td className="p-3 font-semibold text-slate-800">
+                                                        {r.teacherName}
+                                                    </td>
+                                                    <td className="p-3 text-slate-700">
+                                                        <div className="font-bold text-[11px] text-slate-900 mb-0.5">{r.courseName}</div>
+                                                        {r.comment ? (
+                                                            <p className="text-[11px] text-slate-600 bg-slate-50 p-1.5 rounded-lg border border-slate-100 italic">
+                                                                "{r.comment}"
+                                                            </p>
+                                                        ) : (
+                                                            <span className="text-[10px] text-slate-400 italic">(Không để lại bình luận)</span>
+                                                        )}
+                                                    </td>
+                                                    <td className="p-3 text-center">
+                                                        <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                                            r.status === 'RESOLVED' 
+                                                                ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                                                                : r.status === 'IN_PROGRESS'
+                                                                ? 'bg-amber-100 text-amber-800 border border-amber-200'
+                                                                : 'bg-slate-100 text-slate-700 border border-slate-200'
+                                                        }`}>
+                                                            {r.status === 'RESOLVED' ? 'Đã giải quyết' : r.status === 'IN_PROGRESS' ? 'Đang xử lý' : 'Mới tiếp nhận'}
+                                                        </span>
+                                                    </td>
+                                                    <td className="p-3 text-right font-black text-sm" style={{ color: isLow ? '#dc2626' : '#059669' }}>
+                                                        {r.avgScore} / 5.0
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
                         ) : (
-                            /* BẢNG CHẾ ĐỘ 2: XEM DANH SÁCH ĐIỂM NÓNG BẢO TRÌ */
-                            filteredAlerts.length > 0 ? (
-                                <div className="max-h-[380px] overflow-y-auto">
-                                    <table className="w-full text-left border-collapse">
-                                        <thead className="bg-slate-100/90 sticky top-0 z-10 text-slate-700 font-bold text-[11px] uppercase tracking-wider border-b border-slate-200">
-                                            <tr>
-                                                <th className="p-3 w-28">Mã Lớp</th>
-                                                <th className="p-3 w-28">Phòng học</th>
-                                                <th className="p-3 w-36">Giảng viên</th>
-                                                <th className="p-3">Tiêu chí phàn nàn & Ý kiến</th>
-                                                <th className="p-3 text-center w-28">Mức độ</th>
-                                                <th className="p-3 text-right w-24">Điểm TB</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-slate-100 text-xs">
-                                            {paginatedAlerts.map((a: any, idx: number) => {
-                                                const numScore = parseFloat(a.score) || 0;
-                                                const isCritical = numScore <= 2.0;
-                                                return (
-                                                    <tr key={a.id || idx} className="hover:bg-slate-50 transition-colors">
-                                                        <td className="p-3 font-bold text-itc-900">{a.classCode}</td>
-                                                        <td className="p-3 text-slate-600 font-medium">{a.room || 'Phòng học'}</td>
-                                                        <td className="p-3 font-semibold text-slate-800">{a.teacherName || '-'}</td>
-                                                        <td className="p-3 font-medium text-slate-800">
-                                                            <div className="flex items-center gap-2">
-                                                                <span className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0"></span>
-                                                                <span className="font-bold">{a.critName}</span>
-                                                            </div>
-                                                            {a.fullQuestion && (
-                                                                <p className="text-[10px] text-slate-400 mt-0.5 truncate max-w-md font-normal">
-                                                                    {a.fullQuestion}
-                                                                </p>
-                                                            )}
-                                                            {a.studentComments && a.studentComments.length > 0 && (
-                                                                <div className="mt-1 text-[11px] text-slate-600 bg-rose-50/50 p-1.5 rounded-lg border border-rose-100 flex items-start gap-1.5">
-                                                                    <Icons.Comments className="w-3.5 h-3.5 text-slate-400 shrink-0 mt-0.5" />
-                                                                    <i>{a.studentComments[0].comment}</i>
-                                                                </div>
-                                                            )}
-                                                        </td>
-                                                        <td className="p-3 text-center">
-                                                            <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                                                                isCritical 
-                                                                    ? 'bg-rose-100 text-rose-700 border border-rose-200' 
-                                                                    : 'bg-amber-100 text-amber-700 border border-amber-200'
-                                                            }`}>
-                                                                {isCritical ? 'Khẩn cấp' : 'Cần lưu ý'}
-                                                            </span>
-                                                        </td>
-                                                        <td className="p-3 text-right font-black text-rose-600 text-sm">
-                                                            {a.score} / 5.0
-                                                        </td>
-                                                    </tr>
-                                                );
-                                            })}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            ) : (
-                                <div className="p-8 text-center text-slate-400 italic">
-                                    <Icons.CheckCircle className="w-8 h-8 text-emerald-500 mx-auto mb-2 opacity-80" />
-                                    <p className="font-semibold text-slate-600">Tuyệt vời! Không có sự cố điểm nóng nào khớp với bộ lọc này.</p>
-                                </div>
-                            )
+                            <div className="p-8 text-center text-slate-400 italic">
+                                <Icons.Search className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                                <p className="font-semibold text-slate-600">Không có phiếu khảo sát nào khớp với bộ lọc đã chọn.</p>
+                                <p className="text-[11px] text-slate-400 mt-1">Hãy thử đổi tiêu chí môn học, lớp, giảng viên hoặc mức sao ở thanh công cụ trên.</p>
+                            </div>
                         )}
 
                         {/* THANH ĐIỀU HƯỚNG PHÂN TRANG (PAGINATION CONTROLS) */}
-                        {((reportViewMode === 'REVIEWS' && totalReviewItems > 0) || (reportViewMode === 'ALERTS' && totalAlertItems > 0)) && (
+                        {totalReviewItems > 0 && (
                             <div className="px-4 py-3 bg-slate-50 border-t border-slate-200 flex flex-wrap items-center justify-between gap-3 text-xs">
                                 <div className="flex items-center gap-3">
                                     <span className="text-slate-500 font-medium">
                                         Hiển thị{' '}
                                         <b className="text-slate-800">
-                                            {reportViewMode === 'REVIEWS'
-                                                ? (pageSize === 0 ? totalReviewItems : Math.min((currentPage - 1) * pageSize + 1, totalReviewItems))
-                                                : (pageSize === 0 ? totalAlertItems : Math.min((currentPage - 1) * pageSize + 1, totalAlertItems))}
+                                            {pageSize === 0 ? totalReviewItems : Math.min((currentPage - 1) * pageSize + 1, totalReviewItems)}
                                         </b>
                                         {' - '}
                                         <b className="text-slate-800">
-                                            {reportViewMode === 'REVIEWS'
-                                                ? (pageSize === 0 ? totalReviewItems : Math.min(currentPage * pageSize, totalReviewItems))
-                                                : (pageSize === 0 ? totalAlertItems : Math.min(currentPage * pageSize, totalAlertItems))}
+                                            {pageSize === 0 ? totalReviewItems : Math.min(currentPage * pageSize, totalReviewItems)}
                                         </b>
                                         {' / '}
-                                        <span className="text-itc-800 font-bold">
-                                            {reportViewMode === 'REVIEWS' ? totalReviewItems : totalAlertItems}
-                                        </span>{' '}
-                                        bản ghi
+                                        <span className="text-itc-800 font-bold">{totalReviewItems}</span> bản ghi
                                     </span>
 
                                     {/* Dropdown chọn số dòng / trang */}
@@ -1173,13 +1016,13 @@ export const ReportModal = ({
 
                                         <div className="px-3 py-1 bg-white border border-slate-200 rounded-lg text-slate-700 font-bold text-[11px]">
                                             Trang <span className="text-itc-800">{currentPage}</span> /{' '}
-                                            <span>{reportViewMode === 'REVIEWS' ? totalReviewPages : totalAlertPages}</span>
+                                            <span>{totalReviewPages}</span>
                                         </div>
 
                                         <button
                                             type="button"
-                                            disabled={currentPage >= (reportViewMode === 'REVIEWS' ? totalReviewPages : totalAlertPages)}
-                                            onClick={() => setCurrentPage(prev => Math.min(reportViewMode === 'REVIEWS' ? totalReviewPages : totalAlertPages, prev + 1))}
+                                            disabled={currentPage >= totalReviewPages}
+                                            onClick={() => setCurrentPage(prev => Math.min(totalReviewPages, prev + 1))}
                                             className="px-2.5 py-1 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed font-bold text-slate-600 transition"
                                             title="Trang sau"
                                         >
@@ -1187,8 +1030,8 @@ export const ReportModal = ({
                                         </button>
                                         <button
                                             type="button"
-                                            disabled={currentPage >= (reportViewMode === 'REVIEWS' ? totalReviewPages : totalAlertPages)}
-                                            onClick={() => setCurrentPage(reportViewMode === 'REVIEWS' ? totalReviewPages : totalAlertPages)}
+                                            disabled={currentPage >= totalReviewPages}
+                                            onClick={() => setCurrentPage(totalReviewPages)}
                                             className="px-2 py-1 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed font-bold text-slate-600 transition"
                                             title="Đến trang cuối"
                                         >

@@ -1,6 +1,5 @@
 import React, { useState, useMemo } from 'react';
 import { Icons } from '../ui/Icons';
-import { QualityBarChart } from '../ui/QualityBarChart';
 import { CreateClassModal } from '../modals/CreateClassModal';
 import { CreateTeacherModal } from '../modals/CreateTeacherModal';
 import { ConfigureSurveyModal } from '../modals/ConfigureSurveyModal';
@@ -473,15 +472,6 @@ export const AdminView: React.FC<AdminViewProps> = ({
                                 </div>
                             </div>
                         )}
-
-                        {/* BIỂU ĐỒ THỐNG KÊ TƯƠNG QUAN CHẤT LƯỢNG (BAR CHART) - HÌNH 2.11 BÁO CÁO */}
-                        <QualityBarChart
-                            courses={courses}
-                            classMetrics={stats.classMetrics || {}}
-                            warningThreshold={warningThreshold}
-                            onSelectClass={(code) => setFilterClassSearch(code)}
-                            onSelectCourse={(courseId) => setFilterCourseId(courseId)}
-                        />
 
                         {/* Detailed Class Performance List */}
                         <div className="mb-6 flex flex-col gap-5">
